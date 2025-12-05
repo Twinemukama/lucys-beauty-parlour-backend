@@ -10,4 +10,5 @@ type Appointment struct {
 	Time          string `json:"time" binding:"required"`
 	Service       string `json:"service" binding:"required"`
 	Notes         string `json:"notes,omitempty"`
+	Status        string `json:"status" binding:"required"`
 }
