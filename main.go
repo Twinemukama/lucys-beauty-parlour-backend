@@ -2,11 +2,13 @@ package main
 
 import (
 	"os"
+	"time"
 
 	"lucys-beauty-parlour-backend/handlers"
 	"lucys-beauty-parlour-backend/middleware"
 	"lucys-beauty-parlour-backend/storage"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
 
@@ -17,6 +19,14 @@ func main() {
 	}
 
 	r := gin.Default()
+	r.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"http://localhost:8080", "https://lucysbeautyparlour.com"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: true,
+		MaxAge:           12 * time.Hour,
+	}))
 
 	store := storage.NewInMemoryStore()
 	h := &handlers.AppHandlers{Store: store}
