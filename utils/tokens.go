@@ -9,9 +9,6 @@ import (
 
 func GenerateAccessToken(email string) (string, error) {
 	secret := os.Getenv("JWT_SECRET")
-	if secret == "" {
-		secret = "secret"
-	}
 
 	claims := jwt.MapClaims{
 		"admin": true,
@@ -26,9 +23,6 @@ func GenerateAccessToken(email string) (string, error) {
 
 func GenerateRefreshToken() (string, error) {
 	secret := os.Getenv("REFRESH_SECRET")
-	if secret == "" {
-		secret = "refresh-secret"
-	}
 
 	claims := jwt.MapClaims{
 		"type": "refresh",
@@ -42,9 +36,6 @@ func GenerateRefreshToken() (string, error) {
 
 func VerifyAccessToken(tokenStr string) (*jwt.Token, error) {
 	secret := os.Getenv("JWT_SECRET")
-	if secret == "" {
-		secret = "secret"
-	}
 
 	return jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
 		return []byte(secret), nil
@@ -53,9 +44,6 @@ func VerifyAccessToken(tokenStr string) (*jwt.Token, error) {
 
 func VerifyRefreshToken(tokenStr string) (*jwt.Token, error) {
 	secret := os.Getenv("REFRESH_SECRET")
-	if secret == "" {
-		secret = "refresh-secret"
-	}
 
 	return jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
 		return []byte(secret), nil

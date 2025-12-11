@@ -86,9 +86,6 @@ func ForgotPassword(c *gin.Context) {
 	}
 
 	adminEmail := os.Getenv("ADMIN_EMAIL")
-	if adminEmail == "" {
-		adminEmail = "twinemukamai@gmail.com"
-	}
 
 	// Only allow password reset for the admin email
 	if req.Email != adminEmail {
@@ -136,9 +133,6 @@ func ChangePassword(c *gin.Context) {
 	// In production, update password in database here
 	// For now, we'll just acknowledge the reset
 	adminEmail := os.Getenv("ADMIN_EMAIL")
-	if adminEmail == "" {
-		adminEmail = "twinemukamai@gmail.com"
-	}
 
 	// Remove used token
 	tokenMutex.Lock()
