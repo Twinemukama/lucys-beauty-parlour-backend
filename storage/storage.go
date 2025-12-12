@@ -13,6 +13,35 @@ type InMemoryStore struct {
 	next  int64
 }
 
+type RefreshStore struct {
+	mu     sync.RWMutex
+	tokens map[string]bool
+}
+
+func NewRefreshStore() *RefreshStore {
+	return &RefreshStore{
+		tokens: make(map[string]bool),
+	}
+}
+
+func (s *RefreshStore) Save(token string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.tokens[token] = true
+}
+
+func (s *RefreshStore) Exists(token string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.tokens[token]
+}
+
+func (s *RefreshStore) Delete(token string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.tokens, token)
+}
+
 func NewInMemoryStore() *InMemoryStore {
 	return &InMemoryStore{
 		appts: make(map[int64]*models.Appointment),

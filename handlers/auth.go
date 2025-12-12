@@ -9,10 +9,10 @@ import (
 	"sync"
 	"time"
 
+	"lucys-beauty-parlour-backend/storage"
 	"lucys-beauty-parlour-backend/utils"
 
 	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt/v4"
 )
 
 type loginRequest struct {
@@ -35,6 +35,8 @@ var (
 	tokenMutex  sync.RWMutex
 )
 
+var RefreshDB *storage.RefreshStore
+
 func AdminLogin(c *gin.Context) {
 	var req loginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -45,35 +47,34 @@ func AdminLogin(c *gin.Context) {
 	adminEmail := os.Getenv("ADMIN_EMAIL")
 	adminPassword := os.Getenv("ADMIN_PASSWORD")
 
-	if adminEmail == "" {
-		adminEmail = "twinemukamai@gmail.com"
-	}
-	if adminPassword == "" {
-		adminPassword = "LBP@2025"
-	}
-
 	if req.Email != adminEmail || req.Password != adminPassword {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
 		return
 	}
 
-	secret := os.Getenv("JWT_SECRET")
-	if secret == "" {
-		secret = "secret"
-	}
-
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"admin": true,
-		"exp":   time.Now().Add(12 * time.Hour).Unix(),
-	})
-
-	signed, err := token.SignedString([]byte(secret))
+	// Access token (15 min)
+	access, err := utils.GenerateAccessToken(req.Email)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not create token"})
+		c.JSON(500, gin.H{"error": "failed to create token"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"token": signed})
+	// Refresh token (7 days)
+	refresh, err := utils.GenerateRefreshToken()
+	if err != nil {
+		c.JSON(500, gin.H{"error": "failed to create token"})
+		return
+	}
+
+	// Store refresh token server-side
+	RefreshDB.Save(refresh)
+
+	// Send refresh token as HttpOnly cookie
+	c.SetCookie("refresh_token", refresh, 7*24*3600, "/", "", false, true)
+
+	c.JSON(200, gin.H{
+		"access_token": access,
+	})
 }
 
 // ForgotPassword sends a password reset email
@@ -85,9 +86,6 @@ func ForgotPassword(c *gin.Context) {
 	}
 
 	adminEmail := os.Getenv("ADMIN_EMAIL")
-	if adminEmail == "" {
-		adminEmail = "twinemukamai@gmail.com"
-	}
 
 	// Only allow password reset for the admin email
 	if req.Email != adminEmail {
@@ -135,9 +133,6 @@ func ChangePassword(c *gin.Context) {
 	// In production, update password in database here
 	// For now, we'll just acknowledge the reset
 	adminEmail := os.Getenv("ADMIN_EMAIL")
-	if adminEmail == "" {
-		adminEmail = "twinemukamai@gmail.com"
-	}
 
 	// Remove used token
 	tokenMutex.Lock()
@@ -160,4 +155,45 @@ func generateToken(length int) string {
 		return ""
 	}
 	return hex.EncodeToString(b)
+}
+
+func RefreshToken(c *gin.Context) {
+	refreshCookie, err := c.Cookie("refresh_token")
+	if err != nil {
+		c.JSON(401, gin.H{"error": "no refresh token"})
+		return
+	}
+
+	// Check if refresh token exists in store
+	if !RefreshDB.Exists(refreshCookie) {
+		c.JSON(401, gin.H{"error": "invalid refresh token"})
+		return
+	}
+
+	token, err := utils.VerifyRefreshToken(refreshCookie)
+	if err != nil || !token.Valid {
+		c.JSON(401, gin.H{"error": "invalid refresh token"})
+		return
+	}
+
+	// Create new access token
+	access, err := utils.GenerateAccessToken("admin")
+	if err != nil {
+		c.JSON(500, gin.H{"error": "failed to generate access token"})
+		return
+	}
+
+	c.JSON(200, gin.H{"access_token": access})
+}
+
+func Logout(c *gin.Context) {
+	refreshCookie, err := c.Cookie("refresh_token")
+	if err == nil {
+		RefreshDB.Delete(refreshCookie)
+	}
+
+	// Clear cookie
+	c.SetCookie("refresh_token", "", -1, "/", "", false, true)
+
+	c.JSON(200, gin.H{"message": "logged out"})
 }

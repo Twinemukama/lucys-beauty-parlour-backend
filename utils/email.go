@@ -231,9 +231,6 @@ func SendNewAppointmentNotificationToAdmin(appointment *models.Appointment) erro
 		appointment.Date, appointment.Time, appointment.Service, appointment.StaffName, appointment.Notes, appointment.Status)
 
 	adminEmail := os.Getenv("ADMIN_EMAIL")
-	if adminEmail == "" {
-		adminEmail = "twinemukamai@gmail.com"
-	}
 
 	return sendHTMLEmail(adminEmail, fmt.Sprintf("New Appointment Booking - ID: %d", appointment.ID), htmlBody)
 }

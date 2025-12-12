@@ -31,14 +31,19 @@ func main() {
 	store := storage.NewInMemoryStore()
 	h := &handlers.AppHandlers{Store: store}
 
+	refreshStore := storage.NewRefreshStore()
+	handlers.RefreshDB = refreshStore
+
 	// Public routes
 	r.POST("/admin/login", handlers.AdminLogin)
+	r.POST("/admin/refresh", handlers.RefreshToken)
+	r.POST("/admin/logout", handlers.Logout)
 	r.POST("/admin/forgot-password", handlers.ForgotPassword)
 	r.POST("/admin/change-password", handlers.ChangePassword)
 	r.POST("/appointments", h.CreateAppointment)
 
 	// Protected routes (admin only)
-	admin := r.Group("/", middleware.AdminAuth())
+	admin := r.Group("/admin", middleware.AdminAuth())
 	{
 		admin.GET("/appointments", h.ListAppointments)
 		admin.GET("/appointments/:id", h.GetAppointment)
