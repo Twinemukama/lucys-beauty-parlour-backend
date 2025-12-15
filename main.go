@@ -28,6 +28,9 @@ func main() {
 		MaxAge:           12 * time.Hour,
 	}))
 
+	// Serve uploaded files statically
+	r.Static("/uploads", "./uploads")
+
 	store := storage.NewInMemoryStore()
 	h := &handlers.AppHandlers{Store: store}
 
@@ -41,6 +44,9 @@ func main() {
 	r.POST("/admin/forgot-password", handlers.ForgotPassword)
 	r.POST("/admin/change-password", handlers.ChangePassword)
 	r.POST("/appointments", h.CreateAppointment)
+	// Services blog (public)
+	r.GET("/services", h.ListServiceItems)
+	r.GET("/services/:id", h.GetServiceItem)
 
 	// Protected routes (admin only)
 	admin := r.Group("/admin", middleware.AdminAuth())
@@ -50,6 +56,11 @@ func main() {
 		admin.PUT("/appointments/:id", h.UpdateAppointment)
 		admin.PUT("/appointments/:id/cancel", h.CancelAppointment)
 		admin.DELETE("/appointments/:id", h.DeleteAppointment)
+
+		// Services blog (admin CRUD)
+		admin.POST("/services", h.CreateServiceItem)
+		admin.PUT("/services/:id", h.UpdateServiceItem)
+		admin.DELETE("/services/:id", h.DeleteServiceItem)
 	}
 
 	port := os.Getenv("PORT")

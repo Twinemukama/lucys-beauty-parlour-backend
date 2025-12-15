@@ -2,6 +2,7 @@ package storage
 
 import (
 	"errors"
+	"strings"
 	"sync"
 
 	"lucys-beauty-parlour-backend/models"
@@ -11,6 +12,9 @@ type InMemoryStore struct {
 	mu    sync.RWMutex
 	appts map[int64]*models.Appointment
 	next  int64
+	// Services blog
+	services    map[int64]*models.ServiceItem
+	nextService int64
 }
 
 type RefreshStore struct {
@@ -44,8 +48,10 @@ func (s *RefreshStore) Delete(token string) {
 
 func NewInMemoryStore() *InMemoryStore {
 	return &InMemoryStore{
-		appts: make(map[int64]*models.Appointment),
-		next:  1,
+		appts:       make(map[int64]*models.Appointment),
+		next:        1,
+		services:    make(map[int64]*models.ServiceItem),
+		nextService: 1,
 	}
 }
 
@@ -162,4 +168,101 @@ func (s *InMemoryStore) GetAppointmentsWithPagination(offset, limit int) ([]*mod
 
 	// Return paginated slice
 	return all[start:end], totalCount
+}
+
+// --- Services (Blog) Operations ---
+
+func (s *InMemoryStore) CreateServiceItem(it *models.ServiceItem) *models.ServiceItem {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	it.ID = s.nextService
+	s.nextService++
+	s.services[it.ID] = it
+	return it
+}
+
+func (s *InMemoryStore) UpdateServiceItem(id int64, upd *models.ServiceItem) (*models.ServiceItem, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.services[id]; !ok {
+		return nil, errors.New("not found")
+	}
+	upd.ID = id
+	s.services[id] = upd
+	return upd, nil
+}
+
+func (s *InMemoryStore) DeleteServiceItem(id int64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.services[id]; !ok {
+		return errors.New("not found")
+	}
+	delete(s.services, id)
+	return nil
+}
+
+func (s *InMemoryStore) GetServiceItem(id int64) (*models.ServiceItem, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if v, ok := s.services[id]; ok {
+		return v, nil
+	}
+	return nil, errors.New("not found")
+}
+
+// ListServiceItems returns filtered + paginated items and total count
+func (s *InMemoryStore) ListServiceItems(category string, minRating float64, q string, offset, limit int) ([]*models.ServiceItem, int) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	// collect filtered
+	filtered := make([]*models.ServiceItem, 0, len(s.services))
+	for _, v := range s.services {
+		if category != "" && v.Service != category {
+			continue
+		}
+		if minRating > 0 && v.Rating < minRating {
+			continue
+		}
+		if q != "" {
+			if !matchesQuery(v, q) {
+				continue
+			}
+		}
+		filtered = append(filtered, v)
+	}
+
+	total := len(filtered)
+	if offset < 0 {
+		offset = 0
+	}
+	if limit <= 0 {
+		limit = 10
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	start := offset
+	end := offset + limit
+	if start > total {
+		start = total
+	}
+	if end > total {
+		end = total
+	}
+	return filtered[start:end], total
+}
+
+func matchesQuery(v *models.ServiceItem, q string) bool {
+	ql := strings.ToLower(q)
+	if strings.Contains(strings.ToLower(v.Name), ql) {
+		return true
+	}
+	for _, d := range v.Descriptions {
+		if strings.Contains(strings.ToLower(d), ql) {
+			return true
+		}
+	}
+	return false
 }
