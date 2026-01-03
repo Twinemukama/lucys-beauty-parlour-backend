@@ -175,8 +175,15 @@ func (s *InMemoryStore) GetAppointmentsWithPagination(offset, limit int) ([]*mod
 func (s *InMemoryStore) CreateServiceItem(it *models.ServiceItem) *models.ServiceItem {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	it.ID = s.nextService
-	s.nextService++
+	if it.ID == 0 {
+		it.ID = s.nextService
+		s.nextService++
+	} else {
+		// If ID is already set (for seeding), update nextService if needed
+		if it.ID >= s.nextService {
+			s.nextService = it.ID + 1
+		}
+	}
 	s.services[it.ID] = it
 	return it
 }

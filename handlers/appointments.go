@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
+	"time"
 
 	"lucys-beauty-parlour-backend/models"
 	"lucys-beauty-parlour-backend/storage"
@@ -12,36 +14,138 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+type createAppointmentRequest struct {
+	CustomerName       string `json:"customer_name" binding:"required"`
+	CustomerEmail      string `json:"customer_email" binding:"required,email"`
+	CustomerPhone      string `json:"customer_phone" binding:"required"`
+	StaffName          string `json:"staff_name"`
+	Date               string `json:"date"`
+	AppointmentDate    string `json:"appointment_date"`
+	AppointmentDateAlt string `json:"appointmentDate"`
+	Time               string `json:"time"`
+	AppointmentTime    string `json:"appointment_time"`
+	AppointmentTimeAlt string `json:"appointmentTime"`
+	ServiceID          int64  `json:"service_id" binding:"required"`
+	ServiceDescription string `json:"service_description" binding:"required"`
+	Notes              string `json:"notes,omitempty"`
+	Status             string `json:"status"`
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if strings.TrimSpace(v) != "" {
+			return strings.TrimSpace(v)
+		}
+	}
+	return ""
+}
+
+func normalizeAppointmentDate(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", fmt.Errorf("date is required")
+	}
+
+	// If the input starts with YYYY-MM-DD (including RFC3339 timestamps), keep the date portion.
+	if len(raw) >= 10 && raw[4] == '-' && raw[7] == '-' {
+		return raw[:10], nil
+	}
+
+	// Accept common date formats from frontends.
+	layouts := []string{
+		"02/01/2006", // dd/mm/yyyy
+		"02-01-2006", // dd-mm-yyyy
+		"2006/01/02", // yyyy/mm/dd
+		"01/02/2006", // mm/dd/yyyy (fallback)
+	}
+	for _, layout := range layouts {
+		if t, err := time.ParseInLocation(layout, raw, time.Local); err == nil {
+			return t.Format("2006-01-02"), nil
+		}
+	}
+
+	return "", fmt.Errorf("invalid date format; expected YYYY-MM-DD")
+}
+
+func normalizeAppointmentTime(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", fmt.Errorf("time is required")
+	}
+
+	layouts := []string{
+		"15:04",
+		"15:04:05",
+		"3:04 PM",
+		"03:04 PM",
+		"3:04PM",
+		"03:04PM",
+	}
+	for _, layout := range layouts {
+		if t, err := time.ParseInLocation(layout, raw, time.Local); err == nil {
+			return t.Format("15:04"), nil
+		}
+	}
+
+	return "", fmt.Errorf("invalid time format; expected HH:MM")
+}
+
 type AppHandlers struct {
 	Store *storage.InMemoryStore
 }
 
 func (h *AppHandlers) CreateAppointment(c *gin.Context) {
-	var req models.Appointment
+	var req createAppointmentRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
+	dateRaw := firstNonEmpty(req.Date, req.AppointmentDate, req.AppointmentDateAlt)
+	timeRaw := firstNonEmpty(req.Time, req.AppointmentTime, req.AppointmentTimeAlt)
+	date, err := normalizeAppointmentDate(dateRaw)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	clock, err := normalizeAppointmentTime(timeRaw)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	appointment := models.Appointment{
+		CustomerName:       req.CustomerName,
+		CustomerEmail:      req.CustomerEmail,
+		CustomerPhone:      req.CustomerPhone,
+		StaffName:          req.StaffName,
+		Date:               date,
+		Time:               clock,
+		ServiceID:          req.ServiceID,
+		ServiceDescription: req.ServiceDescription,
+		Notes:              req.Notes,
+		Status:             strings.TrimSpace(req.Status),
+	}
+
 	// Validate service exists by ServiceID (foreign key)
-	if req.ServiceID <= 0 {
+	if appointment.ServiceID <= 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "service_id is required and must be positive"})
 		return
 	}
-	svc, err := h.Store.GetServiceItem(req.ServiceID)
+	svc, err := h.Store.GetServiceItem(appointment.ServiceID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid service_id: service not found"})
 		return
 	}
 
 	// Validate selected description/style is provided and belongs to the service
-	if req.ServiceDescription == "" {
+	if appointment.ServiceDescription == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "service_description is required"})
 		return
 	}
 	validDesc := false
 	for _, d := range svc.Descriptions {
-		if d == req.ServiceDescription {
+		if d == appointment.ServiceDescription {
 			validDesc = true
 			break
 		}
@@ -52,17 +156,17 @@ func (h *AppHandlers) CreateAppointment(c *gin.Context) {
 	}
 
 	// Check if the date has availability (max 15 confirmed appointments per day)
-	if !h.Store.IsAppointmentSlotAvailable(req.Date) {
+	if !h.Store.IsAppointmentSlotAvailable(appointment.Date) {
 		c.JSON(http.StatusConflict, gin.H{"error": "No slots available for the requested date. Maximum appointments reached for the day."})
 		return
 	}
 
 	// Set default status to "pending" if not provided
-	if req.Status == "" {
-		req.Status = "pending"
+	if appointment.Status == "" {
+		appointment.Status = "pending"
 	}
 
-	created := h.Store.CreateAppointment(&req)
+	created := h.Store.CreateAppointment(&appointment)
 
 	// Lookup service name for notifications
 	svcName := svc.Name

@@ -11,5 +11,5 @@ type Appointment struct {
 	ServiceID          int64  `json:"service_id" binding:"required"`
 	ServiceDescription string `json:"service_description" binding:"required"`
 	Notes              string `json:"notes,omitempty"`
-	Status             string `json:"status" binding:"required"`
+	Status             string `json:"status"`
 }
