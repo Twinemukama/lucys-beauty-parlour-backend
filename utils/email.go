@@ -6,7 +6,22 @@ import (
 	"mime"
 	"net/smtp"
 	"os"
+	"strings"
 )
+
+func formatAppointmentTotal(currency string, priceCents int64) string {
+	currency = strings.TrimSpace(currency)
+	// Keep this intentionally simple: we store minor units and render as 0.00.
+	whole := priceCents / 100
+	fraction := priceCents % 100
+	if fraction < 0 {
+		fraction = -fraction
+	}
+	if currency == "" {
+		return fmt.Sprintf("%d.%02d", whole, fraction)
+	}
+	return fmt.Sprintf("%s %d.%02d", strings.ToUpper(currency), whole, fraction)
+}
 
 // emailTemplate wraps HTML content with proper MIME headers
 func sendHTMLEmail(to, subject, htmlBody string) error {
@@ -145,6 +160,7 @@ func SendPasswordChangeConfirmation(recipientEmail string) error {
 
 // SendNewAppointmentNotificationToAdmin notifies admin of a new appointment booking
 func SendNewAppointmentNotificationToAdmin(appointment *models.Appointment, serviceName string) error {
+	total := formatAppointmentTotal(appointment.Currency, appointment.PriceCents)
 	htmlBody := fmt.Sprintf(`
 <!DOCTYPE html>
 <html>
@@ -203,6 +219,10 @@ func SendNewAppointmentNotificationToAdmin(appointment *models.Appointment, serv
 					<span>%s</span>
 				</div>
 				<div class="detail-row">
+					<span class="detail-label">Total:</span>
+					<span><strong>%s</strong></span>
+				</div>
+				<div class="detail-row">
 					<span class="detail-label">Staff:</span>
 					<span>%s</span>
 				</div>
@@ -228,7 +248,7 @@ func SendNewAppointmentNotificationToAdmin(appointment *models.Appointment, serv
 </body>
 </html>
 `, appointment.ID, appointment.CustomerName, appointment.CustomerEmail, appointment.CustomerPhone,
-		appointment.Date, appointment.Time, serviceName, appointment.StaffName, appointment.Notes, appointment.Status)
+		appointment.Date, appointment.Time, serviceName, total, appointment.StaffName, appointment.Notes, appointment.Status)
 
 	adminEmail := os.Getenv("ADMIN_EMAIL")
 
@@ -237,6 +257,7 @@ func SendNewAppointmentNotificationToAdmin(appointment *models.Appointment, serv
 
 // SendAppointmentConfirmedEmail notifies user that their appointment was confirmed
 func SendAppointmentConfirmedEmail(appointment *models.Appointment, serviceName string) error {
+	total := formatAppointmentTotal(appointment.Currency, appointment.PriceCents)
 	htmlBody := fmt.Sprintf(`
 <!DOCTYPE html>
 <html>
@@ -284,6 +305,10 @@ func SendAppointmentConfirmedEmail(appointment *models.Appointment, serviceName 
 					<span>%s</span>
 				</div>
 				<div class="detail-row">
+					<span class="detail-label">Total:</span>
+					<span><strong>%s</strong></span>
+				</div>
+				<div class="detail-row">
 					<span class="detail-label">Staff Member:</span>
 					<span>%s</span>
 				</div>
@@ -303,7 +328,7 @@ func SendAppointmentConfirmedEmail(appointment *models.Appointment, serviceName 
 	</div>
 </body>
 </html>
-`, appointment.CustomerName, appointment.ID, appointment.Date, appointment.Time, serviceName, appointment.StaffName)
+`, appointment.CustomerName, appointment.ID, appointment.Date, appointment.Time, serviceName, total, appointment.StaffName)
 
 	return sendHTMLEmail(appointment.CustomerEmail, fmt.Sprintf("Appointment Confirmed - ID: %d", appointment.ID), htmlBody)
 }
@@ -367,6 +392,7 @@ func SendAppointmentRejectedEmail(customerEmail, customerName, serviceName strin
 
 // SendAppointmentUpdatedEmail notifies user about appointment changes
 func SendAppointmentUpdatedEmail(appointment *models.Appointment, serviceName string) error {
+	total := formatAppointmentTotal(appointment.Currency, appointment.PriceCents)
 	htmlBody := fmt.Sprintf(`
 <!DOCTYPE html>
 <html>
@@ -416,6 +442,10 @@ func SendAppointmentUpdatedEmail(appointment *models.Appointment, serviceName st
 					<span>%s</span>
 				</div>
 				<div class="detail-row">
+					<span class="detail-label">Total:</span>
+					<span><strong>%s</strong></span>
+				</div>
+				<div class="detail-row">
 					<span class="detail-label">Staff Member:</span>
 					<span>%s</span>
 				</div>
@@ -435,7 +465,7 @@ func SendAppointmentUpdatedEmail(appointment *models.Appointment, serviceName st
 	</div>
 </body>
 </html>
-`, appointment.CustomerName, appointment.ID, appointment.Date, appointment.Time, serviceName, appointment.StaffName, appointment.Status)
+`, appointment.CustomerName, appointment.ID, appointment.Date, appointment.Time, serviceName, total, appointment.StaffName, appointment.Status)
 
 	return sendHTMLEmail(appointment.CustomerEmail, fmt.Sprintf("Appointment Updated - ID: %d", appointment.ID), htmlBody)
 }

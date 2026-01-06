@@ -10,6 +10,10 @@ type Appointment struct {
 	Time               string `json:"time" binding:"required"`
 	ServiceID          int64  `json:"service_id" binding:"required"`
 	ServiceDescription string `json:"service_description" binding:"required"`
-	Notes              string `json:"notes,omitempty"`
-	Status             string `json:"status"`
+
+	Currency   string `json:"currency,omitempty"`
+	PriceCents int64  `json:"price_cents"`
+
+	Notes  string `json:"notes,omitempty"`
+	Status string `json:"status"`
 }

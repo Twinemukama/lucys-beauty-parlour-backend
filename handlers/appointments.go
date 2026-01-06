@@ -15,20 +15,41 @@ import (
 )
 
 type createAppointmentRequest struct {
-	CustomerName       string `json:"customer_name" binding:"required"`
-	CustomerEmail      string `json:"customer_email" binding:"required,email"`
-	CustomerPhone      string `json:"customer_phone" binding:"required"`
-	StaffName          string `json:"staff_name"`
-	Date               string `json:"date"`
-	AppointmentDate    string `json:"appointment_date"`
-	AppointmentDateAlt string `json:"appointmentDate"`
-	Time               string `json:"time"`
-	AppointmentTime    string `json:"appointment_time"`
-	AppointmentTimeAlt string `json:"appointmentTime"`
-	ServiceID          int64  `json:"service_id" binding:"required"`
-	ServiceDescription string `json:"service_description" binding:"required"`
-	Notes              string `json:"notes,omitempty"`
-	Status             string `json:"status"`
+	CustomerName         string  `json:"customer_name" binding:"required"`
+	CustomerEmail        string  `json:"customer_email" binding:"required,email"`
+	CustomerPhone        string  `json:"customer_phone" binding:"required"`
+	StaffName            string  `json:"staff_name"`
+	Date                 string  `json:"date"`
+	AppointmentDate      string  `json:"appointment_date"`
+	AppointmentDateAlt   string  `json:"appointmentDate"`
+	Time                 string  `json:"time"`
+	AppointmentTime      string  `json:"appointment_time"`
+	AppointmentTimeAlt   string  `json:"appointmentTime"`
+	ServiceID            int64   `json:"service_id" binding:"required"`
+	ServiceDescription   string  `json:"service_description" binding:"required"`
+	SelectedOptionIDs    []int64 `json:"selected_option_ids"`
+	SelectedOptionIDsAlt []int64 `json:"selectedOptionIds"`
+	Currency             string  `json:"currency,omitempty"`
+	PriceCents           int64   `json:"price_cents" binding:"required"`
+	Notes                string  `json:"notes,omitempty"`
+	Status               string  `json:"status"`
+}
+
+type updateAppointmentRequest struct {
+	CustomerName         *string  `json:"customer_name"`
+	CustomerEmail        *string  `json:"customer_email"`
+	CustomerPhone        *string  `json:"customer_phone"`
+	StaffName            *string  `json:"staff_name"`
+	Date                 *string  `json:"date"`
+	Time                 *string  `json:"time"`
+	ServiceID            *int64   `json:"service_id"`
+	ServiceDescription   *string  `json:"service_description"`
+	SelectedOptionIDs    *[]int64 `json:"selected_option_ids"`
+	SelectedOptionIDsAlt *[]int64 `json:"selectedOptionIds"`
+	Currency             *string  `json:"currency"`
+	PriceCents           *int64   `json:"price_cents"`
+	Notes                *string  `json:"notes"`
+	Status               *string  `json:"status"`
 }
 
 func firstNonEmpty(values ...string) string {
@@ -123,6 +144,8 @@ func (h *AppHandlers) CreateAppointment(c *gin.Context) {
 		Time:               clock,
 		ServiceID:          req.ServiceID,
 		ServiceDescription: req.ServiceDescription,
+		Currency:           strings.TrimSpace(req.Currency),
+		PriceCents:         req.PriceCents,
 		Notes:              req.Notes,
 		Status:             strings.TrimSpace(req.Status),
 	}
@@ -152,6 +175,12 @@ func (h *AppHandlers) CreateAppointment(c *gin.Context) {
 	}
 	if !validDesc {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid service_description for the selected service"})
+		return
+	}
+
+	// Frontend provides the total price.
+	if appointment.PriceCents < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "price_cents must be >= 0"})
 		return
 	}
 
@@ -231,31 +260,76 @@ func (h *AppHandlers) UpdateAppointment(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
-	var req models.Appointment
+	// Merge semantics: fetch current appointment first.
+	curr, err := h.Store.GetAppointment(id)
+	if err != nil || curr == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+		return
+	}
+
+	var req updateAppointmentRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+
+	merged := *curr
+	if req.CustomerName != nil {
+		merged.CustomerName = strings.TrimSpace(*req.CustomerName)
+	}
+	if req.CustomerEmail != nil {
+		merged.CustomerEmail = strings.TrimSpace(*req.CustomerEmail)
+	}
+	if req.CustomerPhone != nil {
+		merged.CustomerPhone = strings.TrimSpace(*req.CustomerPhone)
+	}
+	if req.StaffName != nil {
+		merged.StaffName = strings.TrimSpace(*req.StaffName)
+	}
+	if req.Date != nil {
+		merged.Date = strings.TrimSpace(*req.Date)
+	}
+	if req.Time != nil {
+		merged.Time = strings.TrimSpace(*req.Time)
+	}
+	if req.ServiceID != nil {
+		merged.ServiceID = *req.ServiceID
+	}
+	if req.ServiceDescription != nil {
+		merged.ServiceDescription = strings.TrimSpace(*req.ServiceDescription)
+	}
+	// Ignore selected_option_ids for now (frontend-calculated total price is what we persist).
+	if req.Notes != nil {
+		merged.Notes = *req.Notes
+	}
+	if req.Status != nil {
+		merged.Status = strings.TrimSpace(*req.Status)
+	}
+	if req.Currency != nil {
+		merged.Currency = strings.TrimSpace(*req.Currency)
+	}
+	if req.PriceCents != nil {
+		if *req.PriceCents < 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "price_cents must be >= 0"})
+			return
+		}
+		merged.PriceCents = *req.PriceCents
+	}
+
 	// If service or description are present, validate description belongs to service
 	svcForValidation := (*models.ServiceItem)(nil)
-	if req.ServiceID > 0 {
-		if svc, err := h.Store.GetServiceItem(req.ServiceID); err == nil {
+	if merged.ServiceID > 0 {
+		if svc, err := h.Store.GetServiceItem(merged.ServiceID); err == nil {
 			svcForValidation = svc
 		} else {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid service_id: service not found"})
 			return
 		}
 	}
-	if req.ServiceDescription != "" {
+	if merged.ServiceDescription != "" {
 		// Determine service to validate against
 		if svcForValidation == nil {
-			// fetch current appointment to know service
-			curr, err := h.Store.GetAppointment(id)
-			if err != nil {
-				c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
-				return
-			}
-			if svc, err := h.Store.GetServiceItem(curr.ServiceID); err == nil {
+			if svc, err := h.Store.GetServiceItem(merged.ServiceID); err == nil {
 				svcForValidation = svc
 			} else {
 				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid current service for validation"})
@@ -264,7 +338,7 @@ func (h *AppHandlers) UpdateAppointment(c *gin.Context) {
 		}
 		validDesc := false
 		for _, d := range svcForValidation.Descriptions {
-			if d == req.ServiceDescription {
+			if d == merged.ServiceDescription {
 				validDesc = true
 				break
 			}
@@ -275,7 +349,7 @@ func (h *AppHandlers) UpdateAppointment(c *gin.Context) {
 		}
 	}
 
-	updated, err := h.Store.UpdateAppointment(id, &req)
+	updated, err := h.Store.UpdateAppointment(id, &merged)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 		return
