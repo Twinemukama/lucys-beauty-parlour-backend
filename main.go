@@ -113,6 +113,9 @@ func main() {
 	// Services blog (public)
 	r.GET("/services", h.ListServiceItems)
 	r.GET("/services/:id", h.GetServiceItem)
+	// Menu items (public)
+	r.GET("/menu-items", h.ListMenuItems)
+	r.GET("/menu-items/:id", h.GetMenuItem)
 
 	// Protected routes (admin only)
 	admin := r.Group("/admin", middleware.AdminAuth())
@@ -127,6 +130,11 @@ func main() {
 		admin.POST("/services", h.CreateServiceItem)
 		admin.PUT("/services/:id", h.UpdateServiceItem)
 		admin.DELETE("/services/:id", h.DeleteServiceItem)
+
+		// Menu items (admin CRUD)
+		admin.POST("/menu-items", h.CreateMenuItem)
+		admin.PUT("/menu-items/:id", h.UpdateMenuItem)
+		admin.DELETE("/menu-items/:id", h.DeleteMenuItem)
 	}
 
 	port := os.Getenv("PORT")
