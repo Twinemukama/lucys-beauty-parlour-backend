@@ -15,6 +15,9 @@ type InMemoryStore struct {
 	// Services blog
 	services    map[int64]*models.ServiceItem
 	nextService int64
+	// Menu items
+	menuItems    map[int64]*models.MenuItem
+	nextMenuItem int64
 }
 
 type RefreshStore struct {
@@ -48,10 +51,12 @@ func (s *RefreshStore) Delete(token string) {
 
 func NewInMemoryStore() *InMemoryStore {
 	return &InMemoryStore{
-		appts:       make(map[int64]*models.Appointment),
-		next:        1,
-		services:    make(map[int64]*models.ServiceItem),
-		nextService: 1,
+		appts:        make(map[int64]*models.Appointment),
+		next:         1,
+		services:     make(map[int64]*models.ServiceItem),
+		nextService:  1,
+		menuItems:    make(map[int64]*models.MenuItem),
+		nextMenuItem: 1,
 	}
 }
 
@@ -272,4 +277,89 @@ func matchesQuery(v *models.ServiceItem, q string) bool {
 		}
 	}
 	return false
+}
+
+// --- Menu Items Operations ---
+
+func (s *InMemoryStore) CreateMenuItem(it *models.MenuItem) *models.MenuItem {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if it.ID == 0 {
+		it.ID = s.nextMenuItem
+		s.nextMenuItem++
+	} else {
+		if it.ID >= s.nextMenuItem {
+			s.nextMenuItem = it.ID + 1
+		}
+	}
+	s.menuItems[it.ID] = it
+	return it
+}
+
+func (s *InMemoryStore) GetMenuItem(id int64) (*models.MenuItem, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if v, ok := s.menuItems[id]; ok {
+		return v, nil
+	}
+	return nil, errors.New("not found")
+}
+
+func (s *InMemoryStore) UpdateMenuItem(id int64, upd *models.MenuItem) (*models.MenuItem, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.menuItems[id]; !ok {
+		return nil, errors.New("not found")
+	}
+	upd.ID = id
+	s.menuItems[id] = upd
+	return upd, nil
+}
+
+func (s *InMemoryStore) DeleteMenuItem(id int64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.menuItems[id]; !ok {
+		return errors.New("not found")
+	}
+	delete(s.menuItems, id)
+	return nil
+}
+
+func (s *InMemoryStore) ListMenuItems(category string, q string, offset, limit int) ([]*models.MenuItem, int) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	filtered := make([]*models.MenuItem, 0, len(s.menuItems))
+	for _, v := range s.menuItems {
+		if category != "" && v.Category != category {
+			continue
+		}
+		if q != "" {
+			if !strings.Contains(strings.ToLower(v.Name), strings.ToLower(q)) {
+				continue
+			}
+		}
+		filtered = append(filtered, v)
+	}
+
+	total := len(filtered)
+	if offset < 0 {
+		offset = 0
+	}
+	if limit <= 0 {
+		limit = 10
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	start := offset
+	end := offset + limit
+	if start > total {
+		start = total
+	}
+	if end > total {
+		end = total
+	}
+	return filtered[start:end], total
 }
