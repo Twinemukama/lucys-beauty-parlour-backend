@@ -10,17 +10,87 @@ import (
 )
 
 func formatAppointmentTotal(currency string, priceCents int64) string {
-	currency = strings.TrimSpace(currency)
-	// Keep this intentionally simple: we store minor units and render as 0.00.
+	currency = strings.ToUpper(strings.TrimSpace(currency))
+
+	if isZeroDecimalCurrency(currency) {
+		amount := formatIntWithThousands(priceCents)
+		if currency == "" {
+			return amount
+		}
+		return fmt.Sprintf("%s %s", currency, amount)
+	}
+
 	whole := priceCents / 100
 	fraction := priceCents % 100
 	if fraction < 0 {
 		fraction = -fraction
 	}
+
+	value := fmt.Sprintf("%s.%02d", formatIntWithThousands(whole), fraction)
 	if currency == "" {
-		return fmt.Sprintf("%d.%02d", whole, fraction)
+		return value
 	}
-	return fmt.Sprintf("%s %d.%02d", strings.ToUpper(currency), whole, fraction)
+	return fmt.Sprintf("%s %s", currency, value)
+}
+
+func isZeroDecimalCurrency(currency string) bool {
+	switch strings.ToUpper(strings.TrimSpace(currency)) {
+	case "UGX", "KES", "TZS", "RWF", "JPY", "KRW":
+		return true
+	case "":
+		return true
+	default:
+		return false
+	}
+}
+
+func formatIntWithThousands(n int64) string {
+	neg := n < 0
+	if neg {
+		n = -n
+	}
+
+	s := fmt.Sprintf("%d", n)
+	if len(s) <= 3 {
+		if neg {
+			return "-" + s
+		}
+		return s
+	}
+	var out []byte
+	count := 0
+	for i := len(s) - 1; i >= 0; i-- {
+		out = append(out, s[i])
+		count++
+		if count%3 == 0 && i != 0 {
+			out = append(out, ',')
+		}
+	}
+
+	// Reverse to correct order.
+	for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 {
+		out[i], out[j] = out[j], out[i]
+	}
+
+	if neg {
+		return "-" + string(out)
+	}
+	return string(out)
+}
+
+func formatFullServiceName(serviceName, serviceDescription string) string {
+	name := strings.TrimSpace(serviceName)
+	description := strings.TrimSpace(serviceDescription)
+	if description == "" {
+		return name
+	}
+	if name == "" {
+		return description
+	}
+	if strings.EqualFold(name, description) {
+		return name
+	}
+	return fmt.Sprintf("%s - %s", name, description)
 }
 
 // emailTemplate wraps HTML content with proper MIME headers
@@ -97,7 +167,7 @@ func SendPasswordResetEmail(recipientEmail, resetToken string) error {
 		</div>
 		<div class="footer">
 			<p>&copy; 2025 Lucy's Beauty Parlour. All rights reserved.</p>
-			<p>For support, contact us at twinemukamai@gmail.com</p>
+			<p>For support, contact us at twinemukamai@gmail.com or +256-755897061</p>
 		</div>
 	</div>
 </body>
@@ -148,7 +218,7 @@ func SendPasswordChangeConfirmation(recipientEmail string) error {
 		</div>
 		<div class="footer">
 			<p>&copy; 2025 Lucy's Beauty Parlour. All rights reserved.</p>
-			<p>For support, contact us at twinemukamai@gmail.com</p>
+			<p>For support, contact us at twinemukamai@gmail.com or +256-755897061</p>
 		</div>
 	</div>
 </body>
@@ -161,6 +231,7 @@ func SendPasswordChangeConfirmation(recipientEmail string) error {
 // SendNewAppointmentNotificationToAdmin notifies admin of a new appointment booking
 func SendNewAppointmentNotificationToAdmin(appointment *models.Appointment, serviceName string) error {
 	total := formatAppointmentTotal(appointment.Currency, appointment.PriceCents)
+	fullServiceName := formatFullServiceName(serviceName, appointment.ServiceDescription)
 	htmlBody := fmt.Sprintf(`
 <!DOCTYPE html>
 <html>
@@ -237,18 +308,19 @@ func SendNewAppointmentNotificationToAdmin(appointment *models.Appointment, serv
 			</div>
 			<p>Please log in to the admin panel to confirm or reject this appointment.</p>
 			<center>
-				<a href="https://lucysbeautyparlour.com/admin" class="button">Go to Admin Panel</a>
+				<a href="https://localhost:8080/admin/login" class="button">Go to Admin Panel</a>
 			</center>
-			<p>Best regards,<br><strong>Lucy's Beauty Parlour System</strong></p>
+			<p>Best regards,<br><strong>Lucy's Beauty Parlour</strong></p>
 		</div>
 		<div class="footer">
 			<p>&copy; 2025 Lucy's Beauty Parlour. All rights reserved.</p>
+			<p>Contact: twinemukamai@gmail.com | +256-755897061</p>
 		</div>
 	</div>
 </body>
 </html>
 `, appointment.ID, appointment.CustomerName, appointment.CustomerEmail, appointment.CustomerPhone,
-		appointment.Date, appointment.Time, serviceName, total, appointment.StaffName, appointment.Notes, appointment.Status)
+		appointment.Date, appointment.Time, fullServiceName, total, appointment.StaffName, appointment.Notes, appointment.Status)
 
 	adminEmail := os.Getenv("ADMIN_EMAIL")
 
@@ -258,6 +330,7 @@ func SendNewAppointmentNotificationToAdmin(appointment *models.Appointment, serv
 // SendAppointmentConfirmedEmail notifies user that their appointment was confirmed
 func SendAppointmentConfirmedEmail(appointment *models.Appointment, serviceName string) error {
 	total := formatAppointmentTotal(appointment.Currency, appointment.PriceCents)
+	fullServiceName := formatFullServiceName(serviceName, appointment.ServiceDescription)
 	htmlBody := fmt.Sprintf(`
 <!DOCTYPE html>
 <html>
@@ -317,24 +390,26 @@ func SendAppointmentConfirmedEmail(appointment *models.Appointment, serviceName 
 				<strong>💡 Pro Tip:</strong> Please arrive 10 minutes early to complete check-in. If you need to reschedule, feel free to contact us!
 			</div>
 			<p><strong>Need to make changes?</strong></p>
-			<p>If you need to reschedule or have any questions, please contact us as soon as possible at twinemukamai@gmail.com or reply to this email.</p>
+			<p>If you need to reschedule or have any questions, please contact us as soon as possible at twinemukamai@gmail.com or +256-755897061, or reply to this email.</p>
 			<p>Thank you for choosing Lucy's Beauty Parlour!</p>
 			<p>Best regards,<br><strong>Lucy's Beauty Parlour Team</strong></p>
 		</div>
 		<div class="footer">
 			<p>&copy; 2025 Lucy's Beauty Parlour. All rights reserved.</p>
-			<p>Contact: twinemukamai@gmail.com</p>
+			<p>Contact: twinemukamai@gmail.com | +256-755897061</p>
 		</div>
 	</div>
 </body>
 </html>
-`, appointment.CustomerName, appointment.ID, appointment.Date, appointment.Time, serviceName, total, appointment.StaffName)
+`, appointment.CustomerName, appointment.ID, appointment.Date, appointment.Time, fullServiceName, total, appointment.StaffName)
 
 	return sendHTMLEmail(appointment.CustomerEmail, fmt.Sprintf("Appointment Confirmed - ID: %d", appointment.ID), htmlBody)
 }
 
-// SendAppointmentRejectedEmail notifies user that their appointment was rejected
-func SendAppointmentRejectedEmail(customerEmail, customerName, serviceName string, appointmentID int64) error {
+// SendAppointmentRejectedEmail notifies user that their appointment was cancelled
+func SendAppointmentRejectedEmail(appointment *models.Appointment, serviceName string) error {
+	total := formatAppointmentTotal(appointment.Currency, appointment.PriceCents)
+	fullServiceName := formatFullServiceName(serviceName, appointment.ServiceDescription)
 	htmlBody := fmt.Sprintf(`
 <!DOCTYPE html>
 <html>
@@ -365,12 +440,13 @@ func SendAppointmentRejectedEmail(customerEmail, customerName, serviceName strin
 			</div>
 			<p>Hello %s,</p>
 			<p><strong>Service:</strong> %s</p>
+			<p><strong>Total:</strong> %s</p>
 			<p>We regret to inform you that your appointment has been cancelled. We apologize for any inconvenience this may cause.</p>
 			<p>If you would like to reschedule or have any questions, please feel free to:</p>
 			<ul>
 				<li>Book another appointment on our website</li>
 				<li>Contact us at twinemukamai@gmail.com</li>
-				<li>Call us during business hours</li>
+				<li>Call us at +256-755897061 during business hours</li>
 			</ul>
 			<center>
 				<a href="https://lucysbeautyparlour.com/book" class="button">Book Another Appointment</a>
@@ -380,19 +456,20 @@ func SendAppointmentRejectedEmail(customerEmail, customerName, serviceName strin
 		</div>
 		<div class="footer">
 			<p>&copy; 2025 Lucy's Beauty Parlour. All rights reserved.</p>
-			<p>Contact: twinemukamai@gmail.com</p>
+			<p>Contact: twinemukamai@gmail.com | +256-755897061</p>
 		</div>
 	</div>
 </body>
 </html>
-`, appointmentID, customerName, serviceName)
+`, appointment.ID, appointment.CustomerName, fullServiceName, total)
 
-	return sendHTMLEmail(customerEmail, fmt.Sprintf("Appointment Cancelled - ID: %d", appointmentID), htmlBody)
+	return sendHTMLEmail(appointment.CustomerEmail, fmt.Sprintf("Appointment Cancelled - ID: %d", appointment.ID), htmlBody)
 }
 
 // SendAppointmentUpdatedEmail notifies user about appointment changes
 func SendAppointmentUpdatedEmail(appointment *models.Appointment, serviceName string) error {
 	total := formatAppointmentTotal(appointment.Currency, appointment.PriceCents)
+	fullServiceName := formatFullServiceName(serviceName, appointment.ServiceDescription)
 	htmlBody := fmt.Sprintf(`
 <!DOCTYPE html>
 <html>
@@ -454,18 +531,18 @@ func SendAppointmentUpdatedEmail(appointment *models.Appointment, serviceName st
 					<span><strong style="color: #667eea;">%s</strong></span>
 				</div>
 			</div>
-			<p>If you have any questions or concerns about these changes, please don't hesitate to contact us at twinemukamai@gmail.com.</p>
+			<p>If you have any questions or concerns about these changes, please don't hesitate to contact us at twinemukamai@gmail.com or +256-755897061.</p>
 			<p>Thank you for your understanding!</p>
 			<p>Best regards,<br><strong>Lucy's Beauty Parlour Team</strong></p>
 		</div>
 		<div class="footer">
 			<p>&copy; 2025 Lucy's Beauty Parlour. All rights reserved.</p>
-			<p>Contact: twinemukamai@gmail.com</p>
+			<p>Contact: twinemukamai@gmail.com | +256-755897061</p>
 		</div>
 	</div>
 </body>
 </html>
-`, appointment.CustomerName, appointment.ID, appointment.Date, appointment.Time, serviceName, total, appointment.StaffName, appointment.Status)
+`, appointment.CustomerName, appointment.ID, appointment.Date, appointment.Time, fullServiceName, total, appointment.StaffName, appointment.Status)
 
 	return sendHTMLEmail(appointment.CustomerEmail, fmt.Sprintf("Appointment Updated - ID: %d", appointment.ID), htmlBody)
 }

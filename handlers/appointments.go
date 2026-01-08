@@ -404,7 +404,7 @@ func (h *AppHandlers) CancelAppointment(c *gin.Context) {
 		if svc, err := h.Store.GetServiceItem(appt.ServiceID); err == nil && svc != nil {
 			serviceName = svc.Name
 		}
-		if err := utils.SendAppointmentRejectedEmail(appt.CustomerEmail, appt.CustomerName, serviceName, appt.ID); err != nil {
+		if err := utils.SendAppointmentRejectedEmail(appt, serviceName); err != nil {
 			fmt.Println("Error sending rejection email:", err)
 		}
 	}(appointment)
