@@ -250,7 +250,41 @@ func (h *AppHandlers) GetAppointment(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 		return
 	}
-	c.JSON(http.StatusOK, a)
+
+	// Fetch service details to include in response
+	serviceName := ""
+	var serviceDetails *models.ServiceItem
+	if a.ServiceID > 0 {
+		if svc, err := h.Store.GetServiceItem(a.ServiceID); err == nil {
+			serviceName = svc.Name
+			serviceDetails = svc
+		}
+	}
+
+	// Build detailed response with all appointment and service information
+	response := gin.H{
+		"id":                  a.ID,
+		"customer_name":       a.CustomerName,
+		"customer_email":      a.CustomerEmail,
+		"customer_phone":      a.CustomerPhone,
+		"staff_name":          a.StaffName,
+		"date":                a.Date,
+		"time":                a.Time,
+		"service_id":          a.ServiceID,
+		"service_name":        serviceName,
+		"service_description": a.ServiceDescription,
+		"currency":            a.Currency,
+		"price_cents":         a.PriceCents,
+		"notes":               a.Notes,
+		"status":              a.Status,
+	}
+
+	// Include full service details if available
+	if serviceDetails != nil {
+		response["service_details"] = serviceDetails
+	}
+
+	c.JSON(http.StatusOK, response)
 }
 
 func (h *AppHandlers) UpdateAppointment(c *gin.Context) {
