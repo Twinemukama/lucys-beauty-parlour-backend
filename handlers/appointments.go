@@ -287,10 +287,20 @@ func (h *AppHandlers) UpdateAppointment(c *gin.Context) {
 		merged.StaffName = strings.TrimSpace(*req.StaffName)
 	}
 	if req.Date != nil {
-		merged.Date = strings.TrimSpace(*req.Date)
+		normalizedDate, err := normalizeAppointmentDate(strings.TrimSpace(*req.Date))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		merged.Date = normalizedDate
 	}
 	if req.Time != nil {
-		merged.Time = strings.TrimSpace(*req.Time)
+		normalizedTime, err := normalizeAppointmentTime(strings.TrimSpace(*req.Time))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		merged.Time = normalizedTime
 	}
 	if req.ServiceID != nil {
 		merged.ServiceID = *req.ServiceID

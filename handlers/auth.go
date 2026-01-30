@@ -90,7 +90,7 @@ func ForgotPassword(c *gin.Context) {
 	// Only allow password reset for the admin email
 	if req.Email != adminEmail {
 		// Don't reveal if email exists for security
-		c.JSON(http.StatusOK, gin.H{"message": "If this email exists, you will receive a password reset link shortly."})
+		c.JSON(http.StatusOK, gin.H{"message": "Check your admin email for the password reset link."})
 		return
 	}
 
