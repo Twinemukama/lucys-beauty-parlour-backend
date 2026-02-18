@@ -8,6 +8,33 @@ import (
 	"lucys-beauty-parlour-backend/models"
 )
 
+// Store defines the methods required by handlers.
+type Store interface {
+	// Appointments
+	CreateAppointment(a *models.Appointment) *models.Appointment
+	GetAllAppointments() []*models.Appointment
+	GetAppointment(id int64) (*models.Appointment, error)
+	UpdateAppointment(id int64, upd *models.Appointment) (*models.Appointment, error)
+	DeleteAppointment(id int64) error
+	IsAppointmentSlotAvailable(date string) bool
+	CancelAppointment(id int64) (*models.Appointment, error)
+	GetAppointmentsWithPagination(offset, limit int) ([]*models.Appointment, int)
+
+	// Services
+	CreateServiceItem(it *models.ServiceItem) *models.ServiceItem
+	UpdateServiceItem(id int64, upd *models.ServiceItem) (*models.ServiceItem, error)
+	DeleteServiceItem(id int64) error
+	GetServiceItem(id int64) (*models.ServiceItem, error)
+	ListServiceItems(category string, minRating float64, q string, offset, limit int) ([]*models.ServiceItem, int)
+
+	// Menu Items
+	CreateMenuItem(it *models.MenuItem) *models.MenuItem
+	GetMenuItem(id int64) (*models.MenuItem, error)
+	UpdateMenuItem(id int64, upd *models.MenuItem) (*models.MenuItem, error)
+	DeleteMenuItem(id int64) error
+	ListMenuItems(category string, q string, offset, limit int) ([]*models.MenuItem, int)
+}
+
 type InMemoryStore struct {
 	mu    sync.RWMutex
 	appts map[int64]*models.Appointment

@@ -290,6 +290,10 @@ func SendNewAppointmentNotificationToAdmin(appointment *models.Appointment, serv
 					<span>%s</span>
 				</div>
 				<div class="detail-row">
+					<span class="detail-label">Description:</span>
+					<span>%s</span>
+				</div>
+				<div class="detail-row">
 					<span class="detail-label">Total:</span>
 					<span><strong>%s</strong></span>
 				</div>
@@ -320,7 +324,7 @@ func SendNewAppointmentNotificationToAdmin(appointment *models.Appointment, serv
 </body>
 </html>
 `, appointment.ID, appointment.CustomerName, appointment.CustomerEmail, appointment.CustomerPhone,
-		appointment.Date, appointment.Time, fullServiceName, total, appointment.StaffName, appointment.Notes, appointment.Status)
+		appointment.Date, appointment.Time, fullServiceName, appointment.ServiceDescription, total, appointment.StaffName, appointment.Notes, appointment.Status)
 
 	adminEmail := os.Getenv("ADMIN_EMAIL")
 
@@ -378,6 +382,10 @@ func SendAppointmentConfirmedEmail(appointment *models.Appointment, serviceName 
 					<span>%s</span>
 				</div>
 				<div class="detail-row">
+					<span class="detail-label">Description:</span>
+					<span>%s</span>
+				</div>
+				<div class="detail-row">
 					<span class="detail-label">Total:</span>
 					<span><strong>%s</strong></span>
 				</div>
@@ -401,7 +409,7 @@ func SendAppointmentConfirmedEmail(appointment *models.Appointment, serviceName 
 	</div>
 </body>
 </html>
-`, appointment.CustomerName, appointment.ID, appointment.Date, appointment.Time, fullServiceName, total, appointment.StaffName)
+`, appointment.CustomerName, appointment.ID, appointment.Date, appointment.Time, fullServiceName, appointment.ServiceDescription, total, appointment.StaffName)
 
 	return sendHTMLEmail(appointment.CustomerEmail, fmt.Sprintf("Appointment Confirmed - ID: %d", appointment.ID), htmlBody)
 }
@@ -440,6 +448,7 @@ func SendAppointmentRejectedEmail(appointment *models.Appointment, serviceName s
 			</div>
 			<p>Hello %s,</p>
 			<p><strong>Service:</strong> %s</p>
+			<p><strong>Description:</strong> %s</p>
 			<p><strong>Total:</strong> %s</p>
 			<p>We regret to inform you that your appointment has been cancelled. We apologize for any inconvenience this may cause.</p>
 			<p>If you would like to reschedule or have any questions, please feel free to:</p>
@@ -461,7 +470,7 @@ func SendAppointmentRejectedEmail(appointment *models.Appointment, serviceName s
 	</div>
 </body>
 </html>
-`, appointment.ID, appointment.CustomerName, fullServiceName, total)
+`, appointment.ID, appointment.CustomerName, fullServiceName, appointment.ServiceDescription, total)
 
 	return sendHTMLEmail(appointment.CustomerEmail, fmt.Sprintf("Appointment Cancelled - ID: %d", appointment.ID), htmlBody)
 }
@@ -519,6 +528,10 @@ func SendAppointmentUpdatedEmail(appointment *models.Appointment, serviceName st
 					<span>%s</span>
 				</div>
 				<div class="detail-row">
+					<span class="detail-label">Description:</span>
+					<span>%s</span>
+				</div>
+				<div class="detail-row">
 					<span class="detail-label">Total:</span>
 					<span><strong>%s</strong></span>
 				</div>
@@ -542,7 +555,7 @@ func SendAppointmentUpdatedEmail(appointment *models.Appointment, serviceName st
 	</div>
 </body>
 </html>
-`, appointment.CustomerName, appointment.ID, appointment.Date, appointment.Time, fullServiceName, total, appointment.StaffName, appointment.Status)
+`, appointment.CustomerName, appointment.ID, appointment.Date, appointment.Time, fullServiceName, appointment.ServiceDescription, total, appointment.StaffName, appointment.Status)
 
 	return sendHTMLEmail(appointment.CustomerEmail, fmt.Sprintf("Appointment Updated - ID: %d", appointment.ID), htmlBody)
 }

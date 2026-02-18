@@ -152,6 +152,10 @@ func (h *AppHandlers) CreateServiceItem(c *gin.Context) {
 	}
 	req.Images = stored
 	created := h.Store.CreateServiceItem(&req)
+	if created == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create service item"})
+		return
+	}
 	c.JSON(201, created)
 }
 

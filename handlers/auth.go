@@ -2,13 +2,17 @@ package handlers
 
 import (
 	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
+	"lucys-beauty-parlour-backend/database"
 	"lucys-beauty-parlour-backend/storage"
 	"lucys-beauty-parlour-backend/utils"
 
@@ -29,13 +33,19 @@ type changePasswordRequest struct {
 	NewPassword string `json:"new_password" binding:"required"`
 }
 
-// In-memory storage for password reset tokens (in production, use a database)
+type resetTokenEntry struct {
+	Email     string
+	ExpiresAt time.Time
+}
+
+// In-memory storage for password reset tokens.
 var (
-	resetTokens = make(map[string]time.Time)
+	resetTokens = make(map[string]resetTokenEntry)
 	tokenMutex  sync.RWMutex
 )
 
 var RefreshDB *storage.RefreshStore
+var AdminDB *sql.DB
 
 func AdminLogin(c *gin.Context) {
 	var req loginRequest
@@ -44,16 +54,30 @@ func AdminLogin(c *gin.Context) {
 		return
 	}
 
-	adminEmail := os.Getenv("ADMIN_EMAIL")
-	adminPassword := os.Getenv("ADMIN_PASSWORD")
+	email := strings.TrimSpace(req.Email)
+	password := req.Password
 
-	if req.Email != adminEmail || req.Password != adminPassword {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
-		return
+	if AdminDB != nil {
+		ok, err := database.ValidateAdminCredentials(AdminDB, email, password)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "authentication failed"})
+			return
+		}
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
+			return
+		}
+	} else {
+		adminEmail := os.Getenv("ADMIN_EMAIL")
+		adminPassword := os.Getenv("ADMIN_PASSWORD")
+		if email != adminEmail || password != adminPassword {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
+			return
+		}
 	}
 
 	// Access token (15 min)
-	access, err := utils.GenerateAccessToken(req.Email)
+	access, err := utils.GenerateAccessToken(email)
 	if err != nil {
 		c.JSON(500, gin.H{"error": "failed to create token"})
 		return
@@ -77,7 +101,7 @@ func AdminLogin(c *gin.Context) {
 	})
 }
 
-// ForgotPassword sends a password reset email
+// ForgotPassword sends a password reset email.
 func ForgotPassword(c *gin.Context) {
 	var req forgotPasswordRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -85,13 +109,21 @@ func ForgotPassword(c *gin.Context) {
 		return
 	}
 
-	adminEmail := os.Getenv("ADMIN_EMAIL")
+	email := strings.TrimSpace(req.Email)
 
-	// Only allow password reset for the admin email
-	if req.Email != adminEmail {
-		// Don't reveal if email exists for security
-		c.JSON(http.StatusOK, gin.H{"message": "Check your admin email for the password reset link."})
-		return
+	if AdminDB != nil {
+		exists, err := database.AdminExists(AdminDB, email)
+		if err != nil || !exists {
+			// Do not reveal account existence.
+			c.JSON(http.StatusOK, gin.H{"message": "Check your admin email for the password reset link."})
+			return
+		}
+	} else {
+		adminEmail := os.Getenv("ADMIN_EMAIL")
+		if email != adminEmail {
+			c.JSON(http.StatusOK, gin.H{"message": "Check your admin email for the password reset link."})
+			return
+		}
 	}
 
 	// Generate reset token
@@ -99,11 +131,11 @@ func ForgotPassword(c *gin.Context) {
 
 	// Store token with 1-hour expiry
 	tokenMutex.Lock()
-	resetTokens[resetToken] = time.Now().Add(1 * time.Hour)
+	resetTokens[resetToken] = resetTokenEntry{Email: email, ExpiresAt: time.Now().Add(1 * time.Hour)}
 	tokenMutex.Unlock()
 
 	// Send email
-	err := utils.SendPasswordResetEmail(req.Email, resetToken)
+	err := utils.SendPasswordResetEmail(email, resetToken)
 	if err != nil {
 		// Log error but return success to prevent email enumeration
 		fmt.Println("Email send error:", err)
@@ -112,7 +144,7 @@ func ForgotPassword(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "If this email exists, you will receive a password reset link shortly."})
 }
 
-// ChangePassword resets password using a valid reset token
+// ChangePassword resets password using a valid reset token.
 func ChangePassword(c *gin.Context) {
 	var req changePasswordRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -120,19 +152,36 @@ func ChangePassword(c *gin.Context) {
 		return
 	}
 
+	if strings.TrimSpace(req.NewPassword) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "new_password is required"})
+		return
+	}
+
 	// Validate token
 	tokenMutex.RLock()
-	expiry, exists := resetTokens[req.Token]
+	entry, exists := resetTokens[req.Token]
 	tokenMutex.RUnlock()
 
-	if !exists || time.Now().After(expiry) {
+	if !exists || time.Now().After(entry.ExpiresAt) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired reset token"})
 		return
 	}
 
-	// In production, update password in database here
-	// For now, we'll just acknowledge the reset
-	adminEmail := os.Getenv("ADMIN_EMAIL")
+	adminEmail := entry.Email
+	if adminEmail == "" {
+		adminEmail = os.Getenv("ADMIN_EMAIL")
+	}
+
+	if AdminDB != nil {
+		if err := database.UpdateAdminPassword(AdminDB, adminEmail, req.NewPassword); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "admin account not found"})
+				return
+			}
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update password"})
+			return
+		}
+	}
 
 	// Remove used token
 	tokenMutex.Lock()
@@ -148,7 +197,7 @@ func ChangePassword(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Password has been reset. Please log in with your new password."})
 }
 
-// Helper function to generate random tokens
+// Helper function to generate random tokens.
 func generateToken(length int) string {
 	b := make([]byte, length)
 	if _, err := rand.Read(b); err != nil {

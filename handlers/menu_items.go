@@ -125,6 +125,10 @@ func (h *AppHandlers) CreateMenuItem(c *gin.Context) {
 	}
 
 	created := h.Store.CreateMenuItem(item)
+	if created == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create menu item"})
+		return
+	}
 	c.JSON(http.StatusCreated, created)
 }
 
