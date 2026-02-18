@@ -112,7 +112,7 @@ func normalizeAppointmentTime(raw string) (string, error) {
 }
 
 type AppHandlers struct {
-	Store *storage.InMemoryStore
+	Store storage.Store
 }
 
 func (h *AppHandlers) CreateAppointment(c *gin.Context) {
@@ -161,20 +161,9 @@ func (h *AppHandlers) CreateAppointment(c *gin.Context) {
 		return
 	}
 
-	// Validate selected description/style is provided and belongs to the service
-	if appointment.ServiceDescription == "" {
+	// Validate description is provided; allow arbitrary text from frontend
+	if strings.TrimSpace(appointment.ServiceDescription) == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "service_description is required"})
-		return
-	}
-	validDesc := false
-	for _, d := range svc.Descriptions {
-		if d == appointment.ServiceDescription {
-			validDesc = true
-			break
-		}
-	}
-	if !validDesc {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid service_description for the selected service"})
 		return
 	}
 
@@ -196,6 +185,10 @@ func (h *AppHandlers) CreateAppointment(c *gin.Context) {
 	}
 
 	created := h.Store.CreateAppointment(&appointment)
+	if created == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create appointment"})
+		return
+	}
 
 	// Lookup service name for notifications
 	svcName := svc.Name
@@ -360,37 +353,15 @@ func (h *AppHandlers) UpdateAppointment(c *gin.Context) {
 		merged.PriceCents = *req.PriceCents
 	}
 
-	// If service or description are present, validate description belongs to service
-	svcForValidation := (*models.ServiceItem)(nil)
+	// If service or description are present, ensure service exists; allow arbitrary description text
 	if merged.ServiceID > 0 {
-		if svc, err := h.Store.GetServiceItem(merged.ServiceID); err == nil {
-			svcForValidation = svc
-		} else {
+		if _, err := h.Store.GetServiceItem(merged.ServiceID); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid service_id: service not found"})
 			return
 		}
 	}
 	if merged.ServiceDescription != "" {
-		// Determine service to validate against
-		if svcForValidation == nil {
-			if svc, err := h.Store.GetServiceItem(merged.ServiceID); err == nil {
-				svcForValidation = svc
-			} else {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid current service for validation"})
-				return
-			}
-		}
-		validDesc := false
-		for _, d := range svcForValidation.Descriptions {
-			if d == merged.ServiceDescription {
-				validDesc = true
-				break
-			}
-		}
-		if !validDesc {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid service_description for the selected service"})
-			return
-		}
+		merged.ServiceDescription = strings.TrimSpace(merged.ServiceDescription)
 	}
 
 	updated, err := h.Store.UpdateAppointment(id, &merged)
