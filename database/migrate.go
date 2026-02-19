@@ -40,6 +40,7 @@ var defaultServices = []seedService{
 	{ID: 18, Service: "hair", Name: "Jayda Wayda", Descriptions: []string{"Short", "Medium", "Long"}, Images: []string{}, Rating: 0},
 	{ID: 19, Service: "hair", Name: "Gypsy Locs", Descriptions: []string{"Shoulder Length", "Mid-back", "Waist Length"}, Images: []string{}, Rating: 0},
 	{ID: 20, Service: "hair", Name: "Sew-ins", Descriptions: []string{"Leave-out", "Closure", "Frontal"}, Images: []string{}, Rating: 0},
+	{ID: 21, Service: "hair", Name: "Fulani Passion Twists", Descriptions: []string{"Short", "Midback", "Long", "Reversed", "Bouncy"}, Images: []string{}, Rating: 0},
 }
 
 func Migrate(db *sql.DB) error {
