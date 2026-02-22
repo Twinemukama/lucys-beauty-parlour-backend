@@ -353,7 +353,7 @@ func SendNewAppointmentNotificationToAdmin(appointment *models.Appointment, serv
 `, appointment.ID, appointment.CustomerName, appointment.CustomerEmail, appointment.CustomerPhone,
 		appointment.Date, appointment.Time, fullServiceName, appointment.ServiceDescription, total, appointment.StaffName, appointment.Notes, appointment.Status)
 
-	adminEmail := os.Getenv("ADMIN_EMAIL")
+	adminEmail := os.Getenv("SENDER_EMAIL")
 
 	return sendHTMLEmail(adminEmail, fmt.Sprintf("New Appointment Booking - ID: %d", appointment.ID), htmlBody)
 }
