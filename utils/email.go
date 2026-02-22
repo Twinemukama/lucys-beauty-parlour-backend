@@ -7,6 +7,7 @@ import (
 	"net/smtp"
 	"os"
 	"strings"
+	"time"
 )
 
 func formatAppointmentTotal(currency string, priceCents int64) string {
@@ -167,14 +168,40 @@ func SendPasswordResetEmail(recipientEmail, resetToken string) error {
 		</div>
 		<div class="footer">
 			<p>&copy; 2025 Lucy's Beauty Parlour. All rights reserved.</p>
-			<p>For support, contact us at twinemukamai@gmail.com or +256-755897061</p>
+			<p>For support, contact us at info@lucysbeautyparlour.com or +256-755897061</p>
 		</div>
 	</div>
 </body>
 </html>
 `, resetLink, resetLink)
 
-	return sendHTMLEmail(recipientEmail, "Password Reset Request - Lucy's Beauty Parlour", htmlBody)
+	err := sendHTMLEmail(recipientEmail, "Password Reset Request - Lucy's Beauty Parlour", htmlBody)
+	if err != nil {
+		return err
+	}
+
+	// Notify admin that a password reset was requested (no token included)
+	adminEmail := os.Getenv("ADMIN_EMAIL")
+	if adminEmail != "" && !strings.EqualFold(adminEmail, recipientEmail) {
+		adminBody := fmt.Sprintf(`
+<!DOCTYPE html>
+<html>
+<body>
+<p>Hello Admin,</p>
+<p>A password reset was requested for the account: <strong>%s</strong></p>
+<p>Request time: %s</p>
+<p>If this was not initiated by the account owner, please review the account and take appropriate action.</p>
+<p>Regards,<br>Lucy's Beauty Parlour System</p>
+</body>
+</html>
+`, recipientEmail, time.Now().Format(time.RFC1123))
+
+		if err := sendHTMLEmail(adminEmail, "[Admin] Password Reset Requested", adminBody); err != nil {
+			return fmt.Errorf("password reset sent to user, but failed to notify admin: %v", err)
+		}
+	}
+
+	return nil
 }
 
 // SendPasswordChangeConfirmation sends a confirmation email after password change
@@ -206,7 +233,7 @@ func SendPasswordChangeConfirmation(recipientEmail string) error {
 			<p>Hello,</p>
 			<p>Your password has been successfully changed. You can now log in with your new password.</p>
 			<div class="alert">
-				<strong>⚠️ Security Alert:</strong> If this was not you, please contact us immediately at twinemukamai@gmail.com to secure your account.
+				<strong>⚠️ Security Alert:</strong> If this was not you, please contact us immediately at info@lucysbeautyparlour.com to secure your account.
 			</div>
 			<p><strong>Next Steps:</strong></p>
 			<ul>
@@ -218,7 +245,7 @@ func SendPasswordChangeConfirmation(recipientEmail string) error {
 		</div>
 		<div class="footer">
 			<p>&copy; 2025 Lucy's Beauty Parlour. All rights reserved.</p>
-			<p>For support, contact us at twinemukamai@gmail.com or +256-755897061</p>
+			<p>For support, contact us at info@lucysbeautyparlour.com or +256-755897061</p>
 		</div>
 	</div>
 </body>
@@ -312,13 +339,13 @@ func SendNewAppointmentNotificationToAdmin(appointment *models.Appointment, serv
 			</div>
 			<p>Please log in to the admin panel to confirm or reject this appointment.</p>
 			<center>
-				<a href="https://localhost:8080/admin/login" class="button">Go to Admin Panel</a>
+				<a href="https://lucysbeautyparlour.com/admin/login" class="button">Go to Admin Panel</a>
 			</center>
 			<p>Best regards,<br><strong>Lucy's Beauty Parlour</strong></p>
 		</div>
 		<div class="footer">
 			<p>&copy; 2025 Lucy's Beauty Parlour. All rights reserved.</p>
-			<p>Contact: twinemukamai@gmail.com | +256-755897061</p>
+			<p>Contact: info@lucysbeautyparlour.com | +256-755897061</p>
 		</div>
 	</div>
 </body>
@@ -398,13 +425,13 @@ func SendAppointmentConfirmedEmail(appointment *models.Appointment, serviceName 
 				<strong>💡 Pro Tip:</strong> Please arrive 10 minutes early to complete check-in. If you need to reschedule, feel free to contact us!
 			</div>
 			<p><strong>Need to make changes?</strong></p>
-			<p>If you need to reschedule or have any questions, please contact us as soon as possible at twinemukamai@gmail.com or +256-755897061, or reply to this email.</p>
+			<p>If you need to reschedule or have any questions, please contact us as soon as possible at info@lucysbeautyparlour.com or +256-755897061, or reply to this email.</p>
 			<p>Thank you for choosing Lucy's Beauty Parlour!</p>
 			<p>Best regards,<br><strong>Lucy's Beauty Parlour Team</strong></p>
 		</div>
 		<div class="footer">
 			<p>&copy; 2025 Lucy's Beauty Parlour. All rights reserved.</p>
-			<p>Contact: twinemukamai@gmail.com | +256-755897061</p>
+			<p>Contact: info@lucysbeautyparlour.com | +256-755897061</p>
 		</div>
 	</div>
 </body>
@@ -454,7 +481,7 @@ func SendAppointmentRejectedEmail(appointment *models.Appointment, serviceName s
 			<p>If you would like to reschedule or have any questions, please feel free to:</p>
 			<ul>
 				<li>Book another appointment on our website</li>
-				<li>Contact us at twinemukamai@gmail.com</li>
+				<li>Contact us at info@lucysbeautyparlour.com</li>
 				<li>Call us at +256-755897061 during business hours</li>
 			</ul>
 			<center>
@@ -465,7 +492,7 @@ func SendAppointmentRejectedEmail(appointment *models.Appointment, serviceName s
 		</div>
 		<div class="footer">
 			<p>&copy; 2025 Lucy's Beauty Parlour. All rights reserved.</p>
-			<p>Contact: twinemukamai@gmail.com | +256-755897061</p>
+			<p>Contact: info@lucysbeautyparlour.com | +256-755897061</p>
 		</div>
 	</div>
 </body>
@@ -544,13 +571,13 @@ func SendAppointmentUpdatedEmail(appointment *models.Appointment, serviceName st
 					<span><strong style="color: #667eea;">%s</strong></span>
 				</div>
 			</div>
-			<p>If you have any questions or concerns about these changes, please don't hesitate to contact us at twinemukamai@gmail.com or +256-755897061.</p>
+			<p>If you have any questions or concerns about these changes, please don't hesitate to contact us at info@lucysbeautyparlour.com or +256-755897061.</p>
 			<p>Thank you for your understanding!</p>
 			<p>Best regards,<br><strong>Lucy's Beauty Parlour Team</strong></p>
 		</div>
 		<div class="footer">
 			<p>&copy; 2025 Lucy's Beauty Parlour. All rights reserved.</p>
-			<p>Contact: twinemukamai@gmail.com | +256-755897061</p>
+			<p>Contact: info@lucysbeautyparlour.com | +256-755897061</p>
 		</div>
 	</div>
 </body>
