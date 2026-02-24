@@ -1,9 +1,11 @@
 package utils
 
 import (
+	"bytes"
+	"crypto/tls"
+	"encoding/base64"
 	"fmt"
 	"lucys-beauty-parlour-backend/models"
-	"mime"
 	"net/smtp"
 	"os"
 	"strings"
@@ -102,28 +104,65 @@ func sendHTMLEmail(to, subject, htmlBody string) error {
 	smtpPassword := os.Getenv("SMTP_PASSWORD")
 	senderEmail := os.Getenv("SENDER_EMAIL")
 
-	if smtpHost == "" || smtpPort == "" || smtpUser == "" || smtpPassword == "" {
-		return fmt.Errorf("SMTP configuration not properly set")
+	addr := fmt.Sprintf("%s:%s", smtpHost, smtpPort)
+
+	// TLS connection for port 465
+	tlsConfig := &tls.Config{
+		ServerName: smtpHost,
 	}
 
-	// Create MIME headers for HTML email
-	headers := fmt.Sprintf(
-		"From: %s\r\nTo: %s\r\nSubject: =?UTF-8?B?%s?=\r\nMIME-Version: 1.0\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n",
-		senderEmail,
-		to,
-		mime.BEncoding.Encode("utf-8", subject),
-	)
+	conn, err := tls.Dial("tcp", addr, tlsConfig)
+	if err != nil {
+		return fmt.Errorf("TLS connection failed: %v", err)
+	}
 
-	message := headers + htmlBody
+	client, err := smtp.NewClient(conn, smtpHost)
+	if err != nil {
+		return fmt.Errorf("SMTP client error: %v", err)
+	}
 
 	auth := smtp.PlainAuth("", smtpUser, smtpPassword, smtpHost)
-	addr := fmt.Sprintf("%s:%s", smtpHost, smtpPort)
-	err := smtp.SendMail(addr, auth, senderEmail, []string{to}, []byte(message))
-	if err != nil {
-		return fmt.Errorf("failed to send email: %v", err)
+
+	if err = client.Auth(auth); err != nil {
+		return fmt.Errorf("SMTP auth failed: %v", err)
 	}
 
-	return nil
+	// Build email
+	var msg bytes.Buffer
+	msg.WriteString(fmt.Sprintf("From: Lucy's Beauty Parlour <%s>\r\n", senderEmail))
+	msg.WriteString(fmt.Sprintf("To: %s\r\n", to))
+	msg.WriteString(fmt.Sprintf("Subject: %s\r\n", subject))
+	msg.WriteString("MIME-Version: 1.0\r\n")
+	msg.WriteString("Content-Type: text/html; charset=\"UTF-8\"\r\n")
+	msg.WriteString("Content-Transfer-Encoding: base64\r\n\r\n")
+
+	encodedBody := base64.StdEncoding.EncodeToString([]byte(htmlBody))
+	msg.WriteString(encodedBody)
+
+	if err = client.Mail(senderEmail); err != nil {
+		return err
+	}
+
+	if err = client.Rcpt(to); err != nil {
+		return err
+	}
+
+	writer, err := client.Data()
+	if err != nil {
+		return err
+	}
+
+	_, err = writer.Write(msg.Bytes())
+	if err != nil {
+		return err
+	}
+
+	err = writer.Close()
+	if err != nil {
+		return err
+	}
+
+	return client.Quit()
 }
 
 func SendPasswordResetEmail(recipientEmail, resetToken string) error {
@@ -175,10 +214,11 @@ func SendPasswordResetEmail(recipientEmail, resetToken string) error {
 </html>
 `, resetLink, resetLink)
 
-	err := sendHTMLEmail(recipientEmail, "Password Reset Request - Lucy's Beauty Parlour", htmlBody)
-	if err != nil {
-		return err
-	}
+	go func() {
+		if err := sendHTMLEmail(recipientEmail, "Password Reset Request - Lucy's Beauty Parlour", htmlBody); err != nil {
+			fmt.Println("Email error:", err)
+		}
+	}()
 
 	// Notify admin that a password reset was requested (no token included)
 	adminEmail := os.Getenv("ADMIN_EMAIL")
@@ -196,9 +236,11 @@ func SendPasswordResetEmail(recipientEmail, resetToken string) error {
 </html>
 `, recipientEmail, time.Now().Format(time.RFC1123))
 
-		if err := sendHTMLEmail(adminEmail, "[Admin] Password Reset Requested", adminBody); err != nil {
-			return fmt.Errorf("password reset sent to user, but failed to notify admin: %v", err)
-		}
+		go func() {
+			if err := sendHTMLEmail(adminEmail, "[Admin] Password Reset Requested", adminBody); err != nil {
+				fmt.Println("Email error:", err)
+			}
+		}()
 	}
 
 	return nil
