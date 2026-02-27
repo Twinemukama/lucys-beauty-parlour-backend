@@ -27,6 +27,13 @@ type Store interface {
 	GetServiceItem(id int64) (*models.ServiceItem, error)
 	ListServiceItems(category string, minRating float64, q string, offset, limit int) ([]*models.ServiceItem, int)
 
+	// Portfolio Items
+	CreatePortfolioItem(it *models.PortfolioItem) *models.PortfolioItem
+	UpdatePortfolioItem(id int64, upd *models.PortfolioItem) (*models.PortfolioItem, error)
+	DeletePortfolioItem(id int64) error
+	GetPortfolioItem(id int64) (*models.PortfolioItem, error)
+	ListPortfolioItems(category string, q string, offset, limit int) ([]*models.PortfolioItem, int)
+
 	// Menu Items
 	CreateMenuItem(it *models.MenuItem) *models.MenuItem
 	GetMenuItem(id int64) (*models.MenuItem, error)

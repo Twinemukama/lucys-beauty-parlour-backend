@@ -68,7 +68,10 @@ func SaveBase64Image(b64 string) (string, error) {
 
 	// Generate thumbnail (max width 400px, preserve aspect ratio)
 	_ = generateThumbnail(data, uploadsDir, name, ext)
-	return relPath, nil
+
+	// Return path with forward slashes and leading slash for URL compatibility
+	urlPath := "/" + strings.ReplaceAll(relPath, "\\", "/")
+	return urlPath, nil
 }
 
 // detectImageExt attempts to detect common image formats by signature
