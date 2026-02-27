@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"lucys-beauty-parlour-backend/models"
-	"lucys-beauty-parlour-backend/utils"
 
 	"github.com/gin-gonic/gin"
 )
@@ -41,8 +40,6 @@ func isValidBase64Image(s string) bool {
 	}
 	return true
 }
-
-const maxImagesPerService = 8
 
 // Public: list with filters (category, min_rating, pagination)
 func (h *AppHandlers) ListServiceItems(c *gin.Context) {
@@ -128,29 +125,6 @@ func (h *AppHandlers) CreateServiceItem(c *gin.Context) {
 		c.JSON(400, gin.H{"error": "rating must be between 0 and 5"})
 		return
 	}
-	// Validate images are base64 and persist to uploads
-	if len(req.Images) == 0 {
-		c.JSON(400, gin.H{"error": "images are required and must be base64 strings"})
-		return
-	}
-	if len(req.Images) > maxImagesPerService {
-		c.JSON(400, gin.H{"error": "too many images", "max": maxImagesPerService})
-		return
-	}
-	stored := make([]string, 0, len(req.Images))
-	for i, img := range req.Images {
-		if !isValidBase64Image(img) {
-			c.JSON(400, gin.H{"error": "invalid base64 image at index", "index": i})
-			return
-		}
-		path, err := utils.SaveBase64Image(img)
-		if err != nil {
-			c.JSON(500, gin.H{"error": "failed to store image", "index": i})
-			return
-		}
-		stored = append(stored, path)
-	}
-	req.Images = stored
 	created := h.Store.CreateServiceItem(&req)
 	if created == nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create service item"})
@@ -183,48 +157,6 @@ func (h *AppHandlers) UpdateServiceItem(c *gin.Context) {
 		c.JSON(400, gin.H{"error": "rating must be between 0 and 5"})
 		return
 	}
-	// Validate & persist images if provided, otherwise retain existing
-	if req.Images != nil {
-		if len(req.Images) > maxImagesPerService {
-			c.JSON(400, gin.H{"error": "too many images", "max": maxImagesPerService})
-			return
-		}
-		// fetch current to compute cleanup diff
-		curr, _ := h.Store.GetServiceItem(id)
-		stored := make([]string, 0, len(req.Images))
-		for i, img := range req.Images {
-			if !isValidBase64Image(img) {
-				c.JSON(400, gin.H{"error": "invalid base64 image at index", "index": i})
-				return
-			}
-			path, err := utils.SaveBase64Image(img)
-			if err != nil {
-				c.JSON(500, gin.H{"error": "failed to store image", "index": i})
-				return
-			}
-			stored = append(stored, path)
-		}
-		req.Images = stored
-		// cleanup old files not present anymore
-		if curr != nil {
-			old := make(map[string]bool, len(curr.Images))
-			for _, p := range curr.Images {
-				old[p] = true
-			}
-			for _, p := range stored {
-				delete(old, p)
-			}
-			for p := range old {
-				_ = utils.DeleteImageAndThumbnail(p)
-			}
-		}
-	} else {
-		// retain existing images when not provided
-		curr, err := h.Store.GetServiceItem(id)
-		if err == nil && curr != nil {
-			req.Images = curr.Images
-		}
-	}
 	upd, err := h.Store.UpdateServiceItem(id, &req)
 	if err != nil {
 		c.JSON(404, gin.H{"error": "not found"})
@@ -241,16 +173,9 @@ func (h *AppHandlers) DeleteServiceItem(c *gin.Context) {
 		c.JSON(400, gin.H{"error": "invalid id"})
 		return
 	}
-	// fetch to cleanup images
-	curr, _ := h.Store.GetServiceItem(id)
 	if err := h.Store.DeleteServiceItem(id); err != nil {
 		c.JSON(404, gin.H{"error": "not found"})
 		return
-	}
-	if curr != nil {
-		for _, p := range curr.Images {
-			_ = utils.DeleteImageAndThumbnail(p)
-		}
 	}
 	c.Status(204)
 }

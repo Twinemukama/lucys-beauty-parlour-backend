@@ -68,6 +68,9 @@ func main() {
 	// Services blog (public)
 	r.GET("/services", h.ListServiceItems)
 	r.GET("/services/:id", h.GetServiceItem)
+	// Portfolio (public)
+	r.GET("/portfolio", h.ListPortfolioItems)
+	r.GET("/portfolio/:id", h.GetPortfolioItem)
 	// Menu items (public)
 	r.GET("/menu-items", h.ListMenuItems)
 	r.GET("/menu-items/:id", h.GetMenuItem)
@@ -85,6 +88,11 @@ func main() {
 		admin.POST("/services", h.CreateServiceItem)
 		admin.PUT("/services/:id", h.UpdateServiceItem)
 		admin.DELETE("/services/:id", h.DeleteServiceItem)
+
+		// Portfolio (admin CRUD)
+		admin.POST("/portfolio", h.CreatePortfolioItem)
+		admin.PUT("/portfolio/:id", h.UpdatePortfolioItem)
+		admin.DELETE("/portfolio/:id", h.DeletePortfolioItem)
 
 		// Menu items (admin CRUD)
 		admin.POST("/menu-items", h.CreateMenuItem)

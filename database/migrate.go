@@ -15,32 +15,32 @@ type seedService struct {
 	Service      string
 	Name         string
 	Descriptions []string
-	Images       []string
 	Rating       float64
 }
 
 var defaultServices = []seedService{
-	{ID: 1, Service: "hair", Name: "Knotless Braids", Descriptions: []string{"Small", "Medium", "Large"}, Images: []string{}, Rating: 0},
-	{ID: 2, Service: "hair", Name: "Wig Install", Descriptions: []string{"Closure", "Frontal"}, Images: []string{}, Rating: 0},
-	{ID: 3, Service: "makeup", Name: "Soft Glam", Descriptions: []string{"Day", "Evening"}, Images: []string{}, Rating: 0},
-	{ID: 4, Service: "makeup", Name: "Bridal Makeup", Descriptions: []string{"Bride", "Bridesmaid"}, Images: []string{}, Rating: 0},
-	{ID: 5, Service: "nails", Name: "Gel Manicure", Descriptions: []string{"Short", "Medium", "Long"}, Images: []string{}, Rating: 0},
-	{ID: 6, Service: "nails", Name: "Acrylic Full Set", Descriptions: []string{"Short", "Medium", "Long"}, Images: []string{}, Rating: 0},
-	{ID: 7, Service: "hair", Name: "Senegalese Twists", Descriptions: []string{"Short", "Medium", "Long"}, Images: []string{}, Rating: 0},
-	{ID: 8, Service: "hair", Name: "Soft Locs", Descriptions: []string{"Shoulder Length", "Mid-back", "Waist Length"}, Images: []string{}, Rating: 0},
-	{ID: 9, Service: "hair", Name: "Butterfly Locs", Descriptions: []string{"Shoulder Length", "Mid-back", "Waist Length"}, Images: []string{}, Rating: 0},
-	{ID: 10, Service: "hair", Name: "French Curls", Descriptions: []string{"Short", "Medium", "Long"}, Images: []string{}, Rating: 0},
-	{ID: 11, Service: "hair", Name: "Cornrows (All Back)", Descriptions: []string{"4 Lines", "6 Lines", "8+ Lines"}, Images: []string{}, Rating: 0},
-	{ID: 12, Service: "hair", Name: "Stitch Cornrows", Descriptions: []string{"4 Lines", "6 Lines", "8+ Lines"}, Images: []string{}, Rating: 0},
-	{ID: 13, Service: "hair", Name: "Fulani Cornrows", Descriptions: []string{"Classic", "With Beads"}, Images: []string{}, Rating: 0},
-	{ID: 14, Service: "hair", Name: "Passion Twists", Descriptions: []string{"Short", "Medium", "Long"}, Images: []string{}, Rating: 0},
-	{ID: 15, Service: "hair", Name: "Kinky Twists", Descriptions: []string{"Short", "Medium", "Long"}, Images: []string{}, Rating: 0},
-	{ID: 16, Service: "hair", Name: "Hermaid Braids", Descriptions: []string{"Small", "Medium", "Large"}, Images: []string{}, Rating: 0},
-	{ID: 17, Service: "hair", Name: "Italy Curls", Descriptions: []string{"Short", "Medium", "Long"}, Images: []string{}, Rating: 0},
-	{ID: 18, Service: "hair", Name: "Jayda Wayda", Descriptions: []string{"Short", "Medium", "Long"}, Images: []string{}, Rating: 0},
-	{ID: 19, Service: "hair", Name: "Gypsy Locs", Descriptions: []string{"Shoulder Length", "Mid-back", "Waist Length"}, Images: []string{}, Rating: 0},
-	{ID: 20, Service: "hair", Name: "Sew-ins", Descriptions: []string{"Leave-out", "Closure", "Frontal"}, Images: []string{}, Rating: 0},
-	{ID: 21, Service: "hair", Name: "Fulani Passion Twists", Descriptions: []string{"Short", "Midback", "Long", "Reversed", "Bouncy"}, Images: []string{}, Rating: 0},
+	{ID: 1, Service: "hair", Name: "Knotless Braids", Descriptions: []string{"Small", "Medium", "Large"}, Rating: 0},
+	{ID: 2, Service: "hair", Name: "Wig Install", Descriptions: []string{"Closure", "Frontal"}, Rating: 0},
+	{ID: 3, Service: "makeup", Name: "Soft Glam", Descriptions: []string{"Day", "Evening"}, Rating: 0},
+	{ID: 4, Service: "makeup", Name: "Bridal Makeup", Descriptions: []string{"Bride", "Bridesmaid"}, Rating: 0},
+	{ID: 5, Service: "nails", Name: "Gel Manicure", Descriptions: []string{"Short", "Medium", "Long"}, Rating: 0},
+	{ID: 6, Service: "nails", Name: "Acrylic Full Set", Descriptions: []string{"Short", "Medium", "Long"}, Rating: 0},
+	{ID: 7, Service: "hair", Name: "Senegalese Twists", Descriptions: []string{"Short", "Medium", "Long"}, Rating: 0},
+	{ID: 8, Service: "hair", Name: "Soft Locs", Descriptions: []string{"Shoulder Length", "Mid-back", "Waist Length"}, Rating: 0},
+	{ID: 9, Service: "hair", Name: "Butterfly Locs", Descriptions: []string{"Shoulder Length", "Mid-back", "Waist Length"}, Rating: 0},
+	{ID: 10, Service: "hair", Name: "French Curls", Descriptions: []string{"Short", "Medium", "Long"}, Rating: 0},
+	{ID: 11, Service: "hair", Name: "Cornrows (All Back)", Descriptions: []string{"4 Lines", "6 Lines", "8+ Lines"}, Rating: 0},
+	{ID: 12, Service: "hair", Name: "Stitch Cornrows", Descriptions: []string{"4 Lines", "6 Lines", "8+ Lines"}, Rating: 0},
+	{ID: 13, Service: "hair", Name: "Fulani Cornrows", Descriptions: []string{"Classic", "With Beads"}, Rating: 0},
+	{ID: 14, Service: "hair", Name: "Passion Twists", Descriptions: []string{"Short", "Medium", "Long"}, Rating: 0},
+	{ID: 15, Service: "hair", Name: "Kinky Twists", Descriptions: []string{"Short", "Medium", "Long"}, Rating: 0},
+	{ID: 16, Service: "hair", Name: "Hermaid Braids", Descriptions: []string{"Small", "Medium", "Large"}, Rating: 0},
+	{ID: 17, Service: "hair", Name: "Italy Curls", Descriptions: []string{"Short", "Medium", "Long"}, Rating: 0},
+	{ID: 18, Service: "hair", Name: "Jayda Wayda", Descriptions: []string{"Short", "Medium", "Long"}, Rating: 0},
+	{ID: 19, Service: "hair", Name: "Gypsy Locs", Descriptions: []string{"Shoulder Length", "Mid-back", "Waist Length"}, Rating: 0},
+	{ID: 20, Service: "hair", Name: "Sew-ins", Descriptions: []string{"Leave-out", "Closure", "Frontal"}, Rating: 0},
+	{ID: 21, Service: "hair", Name: "Fulani Passion Twists", Descriptions: []string{"Short", "Midback", "Long", "Reversed", "Bouncy"}, Rating: 0},
+	{ID: 22, Service: "makeup", Name: "Eyebrow Trimming", Descriptions: []string{}, Rating: 0},
 }
 
 func Migrate(db *sql.DB) error {
@@ -57,8 +57,15 @@ func Migrate(db *sql.DB) error {
 			service TEXT NOT NULL,
 			name TEXT NOT NULL,
 			descriptions JSONB NOT NULL DEFAULT '[]'::jsonb,
-			images JSONB NOT NULL DEFAULT '[]'::jsonb,
 			rating DOUBLE PRECISION NOT NULL DEFAULT 0
+		);`,
+		`CREATE TABLE IF NOT EXISTS portfolio_items (
+			id BIGSERIAL PRIMARY KEY,
+			category TEXT NOT NULL,
+			style TEXT NOT NULL,
+			images JSONB NOT NULL DEFAULT '[]'::jsonb,
+			description TEXT NOT NULL,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 		);`,
 		`CREATE TABLE IF NOT EXISTS menu_items (
 			id BIGSERIAL PRIMARY KEY,
@@ -85,6 +92,7 @@ func Migrate(db *sql.DB) error {
 		);`,
 		`CREATE INDEX IF NOT EXISTS idx_appointments_date_status ON appointments(appointment_date, status);`,
 		`CREATE INDEX IF NOT EXISTS idx_service_items_service ON service_items(service);`,
+		`CREATE INDEX IF NOT EXISTS idx_portfolio_items_category ON portfolio_items(category);`,
 		`CREATE INDEX IF NOT EXISTS idx_menu_items_category ON menu_items(category);`,
 	}
 
@@ -93,6 +101,30 @@ func Migrate(db *sql.DB) error {
 			return err
 		}
 	}
+
+	// Migrate portfolio_items schema if it exists with old structure
+	// Check if 'title' column exists and rename it to 'style'
+	var columnExists bool
+	err := db.QueryRow(`
+		SELECT EXISTS (
+			SELECT 1 
+			FROM information_schema.columns 
+			WHERE table_name = 'portfolio_items' 
+			AND column_name = 'title'
+		);
+	`).Scan(&columnExists)
+
+	if err == nil && columnExists {
+		// Rename title to style
+		if _, err := db.Exec(`ALTER TABLE portfolio_items RENAME COLUMN title TO style;`); err != nil {
+			return err
+		}
+		// Make description NOT NULL if it isn't already
+		if _, err := db.Exec(`ALTER TABLE portfolio_items ALTER COLUMN description SET NOT NULL;`); err != nil {
+			// Ignore error if it's already NOT NULL
+		}
+	}
+
 	return nil
 }
 
@@ -133,22 +165,17 @@ func seedServices(db *sql.DB) error {
 		if err != nil {
 			return err
 		}
-		imagesJSON, err := json.Marshal(s.Images)
-		if err != nil {
-			return err
-		}
 
 		_, err = db.Exec(`
-			INSERT INTO service_items (id, service, name, descriptions, images, rating)
-			VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6)
+			INSERT INTO service_items (id, service, name, descriptions, rating)
+			VALUES ($1, $2, $3, $4::jsonb, $5)
 			ON CONFLICT (id)
 			DO UPDATE SET
 				service = EXCLUDED.service,
 				name = EXCLUDED.name,
 				descriptions = EXCLUDED.descriptions,
-				images = EXCLUDED.images,
 				rating = EXCLUDED.rating;
-		`, s.ID, s.Service, s.Name, string(descriptionsJSON), string(imagesJSON), s.Rating)
+		`, s.ID, s.Service, s.Name, string(descriptionsJSON), s.Rating)
 		if err != nil {
 			return err
 		}

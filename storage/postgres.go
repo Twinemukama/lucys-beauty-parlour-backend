@@ -18,6 +18,16 @@ func NewPostgresStore(db *sql.DB) *PostgresStore {
 	return &PostgresStore{db: db}
 }
 
+// normalizeImagePaths ensures all image paths have a leading slash for URL compatibility
+func normalizeImagePaths(paths []string) []string {
+	for i, p := range paths {
+		if p != "" && !strings.HasPrefix(p, "/") {
+			paths[i] = "/" + p
+		}
+	}
+	return paths
+}
+
 func (s *PostgresStore) CreateAppointment(a *models.Appointment) *models.Appointment {
 	const q = `
 		INSERT INTO appointments (
@@ -234,20 +244,18 @@ func (s *PostgresStore) GetAppointmentsWithPagination(offset, limit int) ([]*mod
 
 func (s *PostgresStore) CreateServiceItem(it *models.ServiceItem) *models.ServiceItem {
 	descJSON, _ := json.Marshal(it.Descriptions)
-	imgJSON, _ := json.Marshal(it.Images)
 
 	if it.ID > 0 {
 		err := s.db.QueryRow(`
-			INSERT INTO service_items (id, service, name, descriptions, images, rating)
-			VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6)
+			INSERT INTO service_items (id, service, name, descriptions, rating)
+			VALUES ($1, $2, $3, $4::jsonb, $5)
 			ON CONFLICT (id) DO UPDATE SET
 				service = EXCLUDED.service,
 				name = EXCLUDED.name,
 				descriptions = EXCLUDED.descriptions,
-				images = EXCLUDED.images,
 				rating = EXCLUDED.rating
 			RETURNING id
-		`, it.ID, it.Service, it.Name, string(descJSON), string(imgJSON), it.Rating).Scan(&it.ID)
+		`, it.ID, it.Service, it.Name, string(descJSON), it.Rating).Scan(&it.ID)
 		if err != nil {
 			return nil
 		}
@@ -258,10 +266,10 @@ func (s *PostgresStore) CreateServiceItem(it *models.ServiceItem) *models.Servic
 		WITH next_id AS (
 			SELECT COALESCE(MAX(id), 0) + 1 AS id FROM service_items
 		)
-		INSERT INTO service_items (id, service, name, descriptions, images, rating)
-		SELECT id, $1, $2, $3::jsonb, $4::jsonb, $5 FROM next_id
+		INSERT INTO service_items (id, service, name, descriptions, rating)
+		SELECT id, $1, $2, $3::jsonb, $4 FROM next_id
 		RETURNING id
-	`, it.Service, it.Name, string(descJSON), string(imgJSON), it.Rating).Scan(&it.ID)
+	`, it.Service, it.Name, string(descJSON), it.Rating).Scan(&it.ID)
 	if err != nil {
 		return nil
 	}
@@ -273,16 +281,12 @@ func (s *PostgresStore) UpdateServiceItem(id int64, upd *models.ServiceItem) (*m
 	if err != nil {
 		return nil, err
 	}
-	imgJSON, err := json.Marshal(upd.Images)
-	if err != nil {
-		return nil, err
-	}
 
 	res, err := s.db.Exec(`
 		UPDATE service_items
-		SET service = $1, name = $2, descriptions = $3::jsonb, images = $4::jsonb, rating = $5
-		WHERE id = $6
-	`, upd.Service, upd.Name, string(descJSON), string(imgJSON), upd.Rating, id)
+		SET service = $1, name = $2, descriptions = $3::jsonb, rating = $4
+		WHERE id = $5
+	`, upd.Service, upd.Name, string(descJSON), upd.Rating, id)
 	if err != nil {
 		return nil, err
 	}
@@ -314,13 +318,12 @@ func (s *PostgresStore) DeleteServiceItem(id int64) error {
 
 func (s *PostgresStore) GetServiceItem(id int64) (*models.ServiceItem, error) {
 	var descriptionsRaw []byte
-	var imagesRaw []byte
 	it := &models.ServiceItem{}
 	err := s.db.QueryRow(`
-		SELECT id, service, name, descriptions, images, rating
+		SELECT id, service, name, descriptions, rating
 		FROM service_items
 		WHERE id = $1
-	`, id).Scan(&it.ID, &it.Service, &it.Name, &descriptionsRaw, &imagesRaw, &it.Rating)
+	`, id).Scan(&it.ID, &it.Service, &it.Name, &descriptionsRaw, &it.Rating)
 	if err == sql.ErrNoRows {
 		return nil, errors.New("not found")
 	}
@@ -329,9 +332,6 @@ func (s *PostgresStore) GetServiceItem(id int64) (*models.ServiceItem, error) {
 	}
 	if err := json.Unmarshal(descriptionsRaw, &it.Descriptions); err != nil {
 		it.Descriptions = []string{}
-	}
-	if err := json.Unmarshal(imagesRaw, &it.Images); err != nil {
-		it.Images = []string{}
 	}
 	return it, nil
 }
@@ -378,7 +378,7 @@ func (s *PostgresStore) ListServiceItems(category string, minRating float64, q s
 
 	listArgs := append(args, offset, limit)
 	listQuery := fmt.Sprintf(`
-		SELECT id, service, name, descriptions, images, rating
+		SELECT id, service, name, descriptions, rating
 		FROM service_items
 		WHERE %s
 		ORDER BY id ASC
@@ -393,16 +393,13 @@ func (s *PostgresStore) ListServiceItems(category string, minRating float64, q s
 
 	out := make([]*models.ServiceItem, 0)
 	for rows.Next() {
-		var descRaw, imgRaw []byte
+		var descRaw []byte
 		it := &models.ServiceItem{}
-		if err := rows.Scan(&it.ID, &it.Service, &it.Name, &descRaw, &imgRaw, &it.Rating); err != nil {
+		if err := rows.Scan(&it.ID, &it.Service, &it.Name, &descRaw, &it.Rating); err != nil {
 			continue
 		}
 		if err := json.Unmarshal(descRaw, &it.Descriptions); err != nil {
 			it.Descriptions = []string{}
-		}
-		if err := json.Unmarshal(imgRaw, &it.Images); err != nil {
-			it.Images = []string{}
 		}
 		out = append(out, it)
 	}
@@ -530,6 +527,149 @@ func (s *PostgresStore) ListMenuItems(category string, q string, offset, limit i
 		items = append(items, it)
 	}
 	return items, total
+}
+
+// Portfolio Item Methods
+func (s *PostgresStore) CreatePortfolioItem(it *models.PortfolioItem) *models.PortfolioItem {
+	imgJSON, _ := json.Marshal(it.Images)
+
+	err := s.db.QueryRow(`
+		INSERT INTO portfolio_items (category, style, images, description)
+		VALUES ($1, $2, $3::jsonb, $4)
+		RETURNING id, TO_CHAR(created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+	`, it.Category, it.Style, string(imgJSON), it.Description).Scan(&it.ID, &it.CreatedAt)
+	if err != nil {
+		// Log the error for debugging
+		fmt.Printf("CreatePortfolioItem error: %v\n", err)
+		return nil
+	}
+	return it
+}
+
+func (s *PostgresStore) UpdatePortfolioItem(id int64, upd *models.PortfolioItem) (*models.PortfolioItem, error) {
+	imgJSON, err := json.Marshal(upd.Images)
+	if err != nil {
+		return nil, err
+	}
+
+	var createdAt string
+	err = s.db.QueryRow(`
+		UPDATE portfolio_items
+		SET category = $1, style = $2, images = $3::jsonb, description = $4
+		WHERE id = $5
+		RETURNING TO_CHAR(created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+	`, upd.Category, upd.Style, string(imgJSON), upd.Description, id).Scan(&createdAt)
+	if err == sql.ErrNoRows {
+		return nil, errors.New("not found")
+	}
+	if err != nil {
+		return nil, err
+	}
+	upd.ID = id
+	upd.CreatedAt = createdAt
+	return upd, nil
+}
+
+func (s *PostgresStore) DeletePortfolioItem(id int64) error {
+	res, err := s.db.Exec(`DELETE FROM portfolio_items WHERE id = $1`, id)
+	if err != nil {
+		return err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return errors.New("not found")
+	}
+	return nil
+}
+
+func (s *PostgresStore) GetPortfolioItem(id int64) (*models.PortfolioItem, error) {
+	var imagesRaw []byte
+	it := &models.PortfolioItem{}
+	err := s.db.QueryRow(`
+		SELECT id, category, style, images, description, TO_CHAR(created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+		FROM portfolio_items
+		WHERE id = $1
+	`, id).Scan(&it.ID, &it.Category, &it.Style, &imagesRaw, &it.Description, &it.CreatedAt)
+	if err == sql.ErrNoRows {
+		return nil, errors.New("not found")
+	}
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(imagesRaw, &it.Images); err != nil {
+		it.Images = []string{}
+	}
+	it.Images = normalizeImagePaths(it.Images)
+	return it, nil
+}
+
+func (s *PostgresStore) ListPortfolioItems(category string, q string, offset, limit int) ([]*models.PortfolioItem, int) {
+	if offset < 0 {
+		offset = 0
+	}
+	if limit <= 0 {
+		limit = 10
+	}
+	if limit > 100 {
+		limit = 100
+	}
+
+	where := []string{"1=1"}
+	args := make([]any, 0)
+	argN := 1
+
+	if category != "" {
+		where = append(where, fmt.Sprintf("category = $%d", argN))
+		args = append(args, category)
+		argN++
+	}
+	if strings.TrimSpace(q) != "" {
+		pattern := "%" + strings.ToLower(strings.TrimSpace(q)) + "%"
+		where = append(where, fmt.Sprintf("(LOWER(style) LIKE $%d OR LOWER(description) LIKE $%d)", argN, argN))
+		args = append(args, pattern)
+		argN++
+	}
+
+	whereSQL := strings.Join(where, " AND ")
+
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM portfolio_items WHERE %s", whereSQL)
+	var total int
+	if err := s.db.QueryRow(countQuery, args...).Scan(&total); err != nil {
+		return []*models.PortfolioItem{}, 0
+	}
+
+	listArgs := append(args, offset, limit)
+	listQuery := fmt.Sprintf(`
+		SELECT id, category, style, images, description, TO_CHAR(created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+		FROM portfolio_items
+		WHERE %s
+		ORDER BY created_at DESC
+		OFFSET $%d LIMIT $%d
+	`, whereSQL, argN, argN+1)
+
+	rows, err := s.db.Query(listQuery, listArgs...)
+	if err != nil {
+		return []*models.PortfolioItem{}, total
+	}
+	defer rows.Close()
+
+	out := make([]*models.PortfolioItem, 0)
+	for rows.Next() {
+		var imgRaw []byte
+		it := &models.PortfolioItem{}
+		if err := rows.Scan(&it.ID, &it.Category, &it.Style, &imgRaw, &it.Description, &it.CreatedAt); err != nil {
+			continue
+		}
+		if err := json.Unmarshal(imgRaw, &it.Images); err != nil {
+			it.Images = []string{}
+		}
+		it.Images = normalizeImagePaths(it.Images)
+		out = append(out, it)
+	}
+	return out, total
 }
 
 func scanAppointment(scanner interface {

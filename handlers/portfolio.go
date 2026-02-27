@@ -1,0 +1,216 @@
+package handlers
+
+import (
+	"net/http"
+	"strconv"
+
+	"lucys-beauty-parlour-backend/models"
+	"lucys-beauty-parlour-backend/utils"
+
+	"github.com/gin-gonic/gin"
+)
+
+// Allowed portfolio categories: hair | makeup | nails
+func normalizeCategory(s string) string {
+	switch s {
+	case "hair", "makeup", "nails":
+		return s
+	default:
+		return ""
+	}
+}
+
+const maxImagesPerPortfolio = 10
+
+// Public: list with filters (category, search query, pagination)
+func (h *AppHandlers) ListPortfolioItems(c *gin.Context) {
+	category := c.Query("category")
+	if category != "" {
+		category = normalizeCategory(category)
+		if category == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid category. Use one of: hair, makeup, nails"})
+			return
+		}
+	}
+
+	q := c.Query("q")
+
+	offset := 0
+	if v := c.Query("offset"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			offset = n
+		} else {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid offset"})
+			return
+		}
+	}
+	limit := 10
+	if v := c.Query("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			limit = n
+		} else {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid limit"})
+			return
+		}
+	}
+
+	items, total := h.Store.ListPortfolioItems(category, q, offset, limit)
+	c.JSON(http.StatusOK, gin.H{
+		"data":     items,
+		"total":    total,
+		"offset":   offset,
+		"limit":    limit,
+		"has_more": offset+limit < total,
+	})
+}
+
+// Public: get single
+func (h *AppHandlers) GetPortfolioItem(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		c.JSON(400, gin.H{"error": "invalid id"})
+		return
+	}
+	it, err := h.Store.GetPortfolioItem(id)
+	if err != nil {
+		c.JSON(404, gin.H{"error": "not found"})
+		return
+	}
+	c.JSON(200, it)
+}
+
+// Admin: create
+func (h *AppHandlers) CreatePortfolioItem(c *gin.Context) {
+	var req models.PortfolioItem
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+	req.Category = normalizeCategory(req.Category)
+	if req.Category == "" {
+		c.JSON(400, gin.H{"error": "invalid category. Use one of: hair, makeup, nails"})
+		return
+	}
+	// Validate images are base64 and persist to uploads
+	if len(req.Images) == 0 {
+		c.JSON(400, gin.H{"error": "images are required and must be base64 strings"})
+		return
+	}
+	if len(req.Images) > maxImagesPerPortfolio {
+		c.JSON(400, gin.H{"error": "too many images", "max": maxImagesPerPortfolio})
+		return
+	}
+	stored := make([]string, 0, len(req.Images))
+	for i, img := range req.Images {
+		if !isValidBase64Image(img) {
+			c.JSON(400, gin.H{"error": "invalid base64 image at index", "index": i})
+			return
+		}
+		path, err := utils.SaveBase64Image(img)
+		if err != nil {
+			c.JSON(500, gin.H{"error": "failed to store image", "index": i})
+			return
+		}
+		stored = append(stored, path)
+	}
+	req.Images = stored
+	created := h.Store.CreatePortfolioItem(&req)
+	if created == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create portfolio item"})
+		return
+	}
+	c.JSON(201, created)
+}
+
+// Admin: update
+func (h *AppHandlers) UpdatePortfolioItem(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		c.JSON(400, gin.H{"error": "invalid id"})
+		return
+	}
+	var req models.PortfolioItem
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+	if req.Category != "" {
+		req.Category = normalizeCategory(req.Category)
+		if req.Category == "" {
+			c.JSON(400, gin.H{"error": "invalid category. Use one of: hair, makeup, nails"})
+			return
+		}
+	}
+	// Validate & persist images if provided, otherwise retain existing
+	if req.Images != nil {
+		if len(req.Images) > maxImagesPerPortfolio {
+			c.JSON(400, gin.H{"error": "too many images", "max": maxImagesPerPortfolio})
+			return
+		}
+		// fetch current to compute cleanup diff
+		curr, _ := h.Store.GetPortfolioItem(id)
+		stored := make([]string, 0, len(req.Images))
+		for i, img := range req.Images {
+			if !isValidBase64Image(img) {
+				c.JSON(400, gin.H{"error": "invalid base64 image at index", "index": i})
+				return
+			}
+			path, err := utils.SaveBase64Image(img)
+			if err != nil {
+				c.JSON(500, gin.H{"error": "failed to store image", "index": i})
+				return
+			}
+			stored = append(stored, path)
+		}
+		req.Images = stored
+		// cleanup old files not present anymore
+		if curr != nil {
+			old := make(map[string]bool, len(curr.Images))
+			for _, p := range curr.Images {
+				old[p] = true
+			}
+			for _, p := range stored {
+				delete(old, p)
+			}
+			for p := range old {
+				_ = utils.DeleteImageAndThumbnail(p)
+			}
+		}
+	} else {
+		// retain existing images when not provided
+		curr, err := h.Store.GetPortfolioItem(id)
+		if err == nil && curr != nil {
+			req.Images = curr.Images
+		}
+	}
+	upd, err := h.Store.UpdatePortfolioItem(id, &req)
+	if err != nil {
+		c.JSON(404, gin.H{"error": "not found"})
+		return
+	}
+	c.JSON(200, upd)
+}
+
+// Admin: delete
+func (h *AppHandlers) DeletePortfolioItem(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		c.JSON(400, gin.H{"error": "invalid id"})
+		return
+	}
+	// fetch to cleanup images
+	curr, _ := h.Store.GetPortfolioItem(id)
+	if err := h.Store.DeletePortfolioItem(id); err != nil {
+		c.JSON(404, gin.H{"error": "not found"})
+		return
+	}
+	if curr != nil {
+		for _, p := range curr.Images {
+			_ = utils.DeleteImageAndThumbnail(p)
+		}
+	}
+	c.Status(204)
+}
