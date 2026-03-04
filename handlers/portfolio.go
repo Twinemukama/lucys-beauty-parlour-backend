@@ -3,6 +3,7 @@ package handlers
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"lucys-beauty-parlour-backend/models"
 	"lucys-beauty-parlour-backend/utils"
@@ -21,6 +22,15 @@ func normalizeCategory(s string) string {
 }
 
 const maxImagesPerPortfolio = 10
+
+func isPersistedImageRef(s string) bool {
+	v := strings.ToLower(strings.TrimSpace(s))
+	return strings.HasPrefix(v, "/uploads/") || strings.HasPrefix(v, "http://") || strings.HasPrefix(v, "https://") || strings.HasPrefix(v, "data:image/")
+}
+
+func isLocalUploadPath(s string) bool {
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(s)), "/uploads/")
+}
 
 // Public: list with filters (category, search query, pagination)
 func (h *AppHandlers) ListPortfolioItems(c *gin.Context) {
@@ -92,9 +102,9 @@ func (h *AppHandlers) CreatePortfolioItem(c *gin.Context) {
 		c.JSON(400, gin.H{"error": "invalid category. Use one of: hair, makeup, nails"})
 		return
 	}
-	// Validate images are base64 and persist to uploads
+	// Validate images and persist as durable data URIs (or keep existing refs)
 	if len(req.Images) == 0 {
-		c.JSON(400, gin.H{"error": "images are required and must be base64 strings"})
+		c.JSON(400, gin.H{"error": "images are required"})
 		return
 	}
 	if len(req.Images) > maxImagesPerPortfolio {
@@ -103,16 +113,21 @@ func (h *AppHandlers) CreatePortfolioItem(c *gin.Context) {
 	}
 	stored := make([]string, 0, len(req.Images))
 	for i, img := range req.Images {
-		if !isValidBase64Image(img) {
-			c.JSON(400, gin.H{"error": "invalid base64 image at index", "index": i})
-			return
+		if isValidBase64Image(img) {
+			dataURI, err := utils.Base64ImageToDataURI(img)
+			if err != nil {
+				c.JSON(500, gin.H{"error": "failed to store image", "index": i})
+				return
+			}
+			stored = append(stored, dataURI)
+			continue
 		}
-		path, err := utils.SaveBase64Image(img)
-		if err != nil {
-			c.JSON(500, gin.H{"error": "failed to store image", "index": i})
-			return
+		if isPersistedImageRef(img) {
+			stored = append(stored, img)
+			continue
 		}
-		stored = append(stored, path)
+		c.JSON(400, gin.H{"error": "invalid image at index", "index": i})
+		return
 	}
 	req.Images = stored
 	created := h.Store.CreatePortfolioItem(&req)
@@ -153,23 +168,30 @@ func (h *AppHandlers) UpdatePortfolioItem(c *gin.Context) {
 		curr, _ := h.Store.GetPortfolioItem(id)
 		stored := make([]string, 0, len(req.Images))
 		for i, img := range req.Images {
-			if !isValidBase64Image(img) {
-				c.JSON(400, gin.H{"error": "invalid base64 image at index", "index": i})
-				return
+			if isValidBase64Image(img) {
+				dataURI, err := utils.Base64ImageToDataURI(img)
+				if err != nil {
+					c.JSON(500, gin.H{"error": "failed to store image", "index": i})
+					return
+				}
+				stored = append(stored, dataURI)
+				continue
 			}
-			path, err := utils.SaveBase64Image(img)
-			if err != nil {
-				c.JSON(500, gin.H{"error": "failed to store image", "index": i})
-				return
+			if isPersistedImageRef(img) {
+				stored = append(stored, img)
+				continue
 			}
-			stored = append(stored, path)
+			c.JSON(400, gin.H{"error": "invalid image at index", "index": i})
+			return
 		}
 		req.Images = stored
 		// cleanup old files not present anymore
 		if curr != nil {
 			old := make(map[string]bool, len(curr.Images))
 			for _, p := range curr.Images {
-				old[p] = true
+				if isLocalUploadPath(p) {
+					old[p] = true
+				}
 			}
 			for _, p := range stored {
 				delete(old, p)
@@ -209,7 +231,9 @@ func (h *AppHandlers) DeletePortfolioItem(c *gin.Context) {
 	}
 	if curr != nil {
 		for _, p := range curr.Images {
-			_ = utils.DeleteImageAndThumbnail(p)
+			if isLocalUploadPath(p) {
+				_ = utils.DeleteImageAndThumbnail(p)
+			}
 		}
 	}
 	c.Status(204)

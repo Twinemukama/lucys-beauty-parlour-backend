@@ -18,28 +18,60 @@ import (
 // MaxImageBytes is the maximum allowed decoded image size (default 5MB)
 const MaxImageBytes = 5 * 1024 * 1024
 
-// SaveBase64Image decodes a base64 image string (optionally with data URI prefix)
-// and writes it to the local uploads directory. Returns the relative path.
-func SaveBase64Image(b64 string) (string, error) {
+func decodeBase64Image(b64 string) ([]byte, error) {
 	if b64 == "" {
-		return "", errors.New("empty image string")
+		return nil, errors.New("empty image string")
 	}
-	// Strip data URI prefix if present
 	if idx := strings.Index(b64, ","); idx != -1 && strings.Contains(strings.ToLower(b64[:idx]), "base64") {
 		b64 = b64[idx+1:]
 	}
 
 	data, err := base64.StdEncoding.DecodeString(b64)
 	if err != nil {
-		// Try raw std encoding (no padding)
 		data, err = base64.RawStdEncoding.DecodeString(b64)
 		if err != nil {
-			return "", fmt.Errorf("failed to decode base64: %w", err)
+			return nil, fmt.Errorf("failed to decode base64: %w", err)
 		}
 	}
 
 	if len(data) > MaxImageBytes {
-		return "", fmt.Errorf("image exceeds max size of %d bytes", MaxImageBytes)
+		return nil, fmt.Errorf("image exceeds max size of %d bytes", MaxImageBytes)
+	}
+
+	return data, nil
+}
+
+// Base64ImageToDataURI normalizes a base64 image into a canonical data URI string.
+func Base64ImageToDataURI(b64 string) (string, error) {
+	data, err := decodeBase64Image(b64)
+	if err != nil {
+		return "", err
+	}
+
+	ext := detectImageExt(data)
+	if ext == "" || ext == ".bin" {
+		return "", errors.New("unsupported image format")
+	}
+
+	mime := "image/jpeg"
+	switch ext {
+	case ".png":
+		mime = "image/png"
+	case ".gif":
+		mime = "image/gif"
+	case ".webp":
+		mime = "image/webp"
+	}
+
+	return fmt.Sprintf("data:%s;base64,%s", mime, base64.StdEncoding.EncodeToString(data)), nil
+}
+
+// SaveBase64Image decodes a base64 image string (optionally with data URI prefix)
+// and writes it to the local uploads directory. Returns the relative path.
+func SaveBase64Image(b64 string) (string, error) {
+	data, err := decodeBase64Image(b64)
+	if err != nil {
+		return "", err
 	}
 
 	// Simple MIME detection by magic numbers
