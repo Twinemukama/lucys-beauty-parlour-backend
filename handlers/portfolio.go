@@ -25,7 +25,8 @@ const maxImagesPerPortfolio = 10
 
 func isPersistedImageRef(s string) bool {
 	v := strings.ToLower(strings.TrimSpace(s))
-	return strings.HasPrefix(v, "/uploads/") || strings.HasPrefix(v, "http://") || strings.HasPrefix(v, "https://") || strings.HasPrefix(v, "data:image/")
+	// Persisted refs are either data URIs or absolute URLs. Do not accept ephemeral /uploads paths.
+	return strings.HasPrefix(v, "data:image/") || strings.HasPrefix(v, "http://") || strings.HasPrefix(v, "https://")
 }
 
 func isLocalUploadPath(s string) bool {

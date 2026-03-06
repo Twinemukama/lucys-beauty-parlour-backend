@@ -21,7 +21,21 @@ func NewPostgresStore(db *sql.DB) *PostgresStore {
 // normalizeImagePaths ensures all image paths have a leading slash for URL compatibility
 func normalizeImagePaths(paths []string) []string {
 	for i, p := range paths {
-		if p != "" && !strings.HasPrefix(p, "/") {
+		if p == "" {
+			continue
+		}
+		lower := strings.ToLower(p)
+		// Leave data URIs and absolute URLs unchanged
+		if strings.HasPrefix(lower, "data:") || strings.HasPrefix(lower, "http://") || strings.HasPrefix(lower, "https://") {
+			continue
+		}
+		// If someone accidentally stored "/data:..." or "/http...", strip the extra leading slash
+		if strings.HasPrefix(lower, "/data:") || strings.HasPrefix(lower, "/http://") || strings.HasPrefix(lower, "/https://") {
+			paths[i] = p[1:]
+			continue
+		}
+		// For local upload paths, ensure they start with a slash
+		if !strings.HasPrefix(p, "/") {
 			paths[i] = "/" + p
 		}
 	}
