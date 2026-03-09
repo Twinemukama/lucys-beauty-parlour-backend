@@ -1,15 +1,14 @@
 package utils
 
 import (
-	"bytes"
-	"crypto/tls"
-	"encoding/base64"
 	"fmt"
+	"log"
 	"lucys-beauty-parlour-backend/models"
-	"net/smtp"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/resend/resend-go/v3"
 )
 
 func formatAppointmentTotal(currency string, priceCents int64) string {
@@ -98,71 +97,31 @@ func formatFullServiceName(serviceName, serviceDescription string) string {
 
 // emailTemplate wraps HTML content with proper MIME headers
 func sendHTMLEmail(to, subject, htmlBody string) error {
-	smtpHost := os.Getenv("SMTP_HOST")
-	smtpPort := os.Getenv("SMTP_PORT")
-	smtpUser := os.Getenv("SMTP_USER")
-	smtpPassword := os.Getenv("SMTP_PASSWORD")
+	apiKey := os.Getenv("RESEND_API_KEY")
 	senderEmail := os.Getenv("SENDER_EMAIL")
-
-	addr := fmt.Sprintf("%s:%s", smtpHost, smtpPort)
-
-	// TLS connection for port 465
-	tlsConfig := &tls.Config{
-		ServerName: smtpHost,
+	if senderEmail == "" {
+		senderEmail = os.Getenv("ADMIN_EMAIL")
 	}
 
-	conn, err := tls.Dial("tcp", addr, tlsConfig)
+	if apiKey == "" {
+		return fmt.Errorf("missing RESEND_API_KEY: cannot send email")
+	}
+
+	client := resend.NewClient(apiKey)
+	params := &resend.SendEmailRequest{
+		From:    senderEmail,
+		To:      []string{to},
+		Subject: subject,
+		Html:    htmlBody,
+	}
+
+	sent, err := client.Emails.Send(params)
 	if err != nil {
-		return fmt.Errorf("TLS connection failed: %v", err)
+		return fmt.Errorf("resend send error: %v", err)
 	}
 
-	client, err := smtp.NewClient(conn, smtpHost)
-	if err != nil {
-		return fmt.Errorf("SMTP client error: %v", err)
-	}
-
-	auth := smtp.PlainAuth("", smtpUser, smtpPassword, smtpHost)
-
-	if err = client.Auth(auth); err != nil {
-		return fmt.Errorf("SMTP auth failed: %v", err)
-	}
-
-	// Build email
-	var msg bytes.Buffer
-	msg.WriteString(fmt.Sprintf("From: Lucy's Beauty Parlour <%s>\r\n", senderEmail))
-	msg.WriteString(fmt.Sprintf("To: %s\r\n", to))
-	msg.WriteString(fmt.Sprintf("Subject: %s\r\n", subject))
-	msg.WriteString("MIME-Version: 1.0\r\n")
-	msg.WriteString("Content-Type: text/html; charset=\"UTF-8\"\r\n")
-	msg.WriteString("Content-Transfer-Encoding: base64\r\n\r\n")
-
-	encodedBody := base64.StdEncoding.EncodeToString([]byte(htmlBody))
-	msg.WriteString(encodedBody)
-
-	if err = client.Mail(senderEmail); err != nil {
-		return err
-	}
-
-	if err = client.Rcpt(to); err != nil {
-		return err
-	}
-
-	writer, err := client.Data()
-	if err != nil {
-		return err
-	}
-
-	_, err = writer.Write(msg.Bytes())
-	if err != nil {
-		return err
-	}
-
-	err = writer.Close()
-	if err != nil {
-		return err
-	}
-
-	return client.Quit()
+	log.Printf("email sent: %s", sent.Id)
+	return nil
 }
 
 func SendPasswordResetEmail(recipientEmail, resetToken string) error {
