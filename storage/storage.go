@@ -2,6 +2,7 @@ package storage
 
 import (
 	"errors"
+	"sort"
 	"strings"
 	"sync"
 
@@ -182,11 +183,9 @@ func (s *InMemoryStore) GetAppointmentsWithPagination(offset, limit int) ([]*mod
 	if offset < 0 {
 		offset = 0
 	}
+	// If limit <= 0, treat as no limit (return all)
 	if limit <= 0 {
-		limit = 10 // default limit
-	}
-	if limit > 100 {
-		limit = 100 // max limit
+		limit = totalCount
 	}
 
 	// Collect all appointments
@@ -194,6 +193,11 @@ func (s *InMemoryStore) GetAppointmentsWithPagination(offset, limit int) ([]*mod
 	for _, v := range s.appts {
 		all = append(all, v)
 	}
+
+	// Sort by ID descending so results are deterministic (newest first)
+	sort.Slice(all, func(i, j int) bool {
+		return all[i].ID > all[j].ID
+	})
 
 	// Calculate end index
 	start := offset

@@ -219,16 +219,15 @@ func (s *PostgresStore) GetAppointmentsWithPagination(offset, limit int) ([]*mod
 	if offset < 0 {
 		offset = 0
 	}
-	if limit <= 0 {
-		limit = 10
-	}
-	if limit > 100 {
-		limit = 100
-	}
+	// If limit <= 0, treat as no limit (return all). We'll set limit to total after counting.
 
 	var total int
 	if err := s.db.QueryRow(`SELECT COUNT(*) FROM appointments`).Scan(&total); err != nil {
 		return []*models.Appointment{}, 0
+	}
+
+	if limit <= 0 {
+		limit = total
 	}
 
 	rows, err := s.db.Query(`

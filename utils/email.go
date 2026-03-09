@@ -486,7 +486,7 @@ func SendAppointmentRejectedEmail(appointment *models.Appointment, serviceName s
 				<li>Call us at +256-755897061 during business hours</li>
 			</ul>
 			<center>
-				<a href="https://lucysbeautyparlour.com/book" class="button">Book Another Appointment</a>
+				<a href="https://www.lucysbeautyparlour.com/" class="button">Book Another Appointment</a>
 			</center>
 			<p>We hope to see you soon!</p>
 			<p>Best regards,<br><strong>Lucy's Beauty Parlour Team</strong></p>

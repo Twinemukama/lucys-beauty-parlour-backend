@@ -204,9 +204,10 @@ func (h *AppHandlers) CreateAppointment(c *gin.Context) {
 }
 
 func (h *AppHandlers) ListAppointments(c *gin.Context) {
-	// Get pagination parameters from query
+	// Get pagination parameters from query.
+	// For admin list we return all appointments by default (limit=0 => no limit)
 	offsetStr := c.DefaultQuery("offset", "0")
-	limitStr := c.DefaultQuery("limit", "10")
+	limitStr := c.DefaultQuery("limit", "0")
 
 	offset, err := strconv.Atoi(offsetStr)
 	if err != nil {
@@ -222,12 +223,15 @@ func (h *AppHandlers) ListAppointments(c *gin.Context) {
 
 	appointments, totalCount := h.Store.GetAppointmentsWithPagination(offset, limit)
 
+	// has_more should be computed from the actual returned slice length
+	hasMore := offset+len(appointments) < totalCount
+
 	c.JSON(http.StatusOK, gin.H{
 		"data":     appointments,
 		"total":    totalCount,
 		"offset":   offset,
 		"limit":    limit,
-		"has_more": offset+limit < totalCount,
+		"has_more": hasMore,
 	})
 }
 
