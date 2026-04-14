@@ -246,3 +246,8 @@ func Logout(c *gin.Context) {
 
 	c.JSON(200, gin.H{"message": "logged out"})
 }
+
+// Add health endpoint
+func Health(c *gin.Context) {
+	c.JSON(200, gin.H{"status": "ok"})
+}
