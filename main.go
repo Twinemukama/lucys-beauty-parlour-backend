@@ -16,8 +16,6 @@ import (
 )
 
 func main() {
-	// Load environment variables from .env for local/dev runs.
-	// In production, env vars are typically injected by the runtime.
 	_ = godotenv.Load()
 
 	// Allow Gin mode to be controlled via GIN_MODE env, default to release.
@@ -74,6 +72,7 @@ func main() {
 	// Menu items (public)
 	r.GET("/menu-items", h.ListMenuItems)
 	r.GET("/menu-items/:id", h.GetMenuItem)
+	r.GET("/health", handlers.Health)
 
 	// Protected routes (admin only)
 	admin := r.Group("/admin", middleware.AdminAuth())
